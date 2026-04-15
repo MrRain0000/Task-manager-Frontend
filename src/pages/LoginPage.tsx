@@ -40,7 +40,7 @@ export default function LoginPage() {
       const response = await login({ email, password })
       const user = response.data.user
 
-      // Kiểm tra nếu chưa xác thực email
+      // Kiểm tra nếu chưa xác thực email (trường hợp API vẫn trả về 200)
       if (user && !user.isVerified) {
         setNeedsVerification(true)
         setIsLoading(false)
@@ -50,8 +50,13 @@ export default function LoginPage() {
       localStorage.setItem('token', response.data.accessToken)
       localStorage.setItem('user', JSON.stringify(user || { id: 1, username: email.split('@')[0], email, isVerified: true }))
       window.location.href = '/'
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+    } catch (err: any) {
+      // Backend trả 403 Forbidden khi chưa xác thực email
+      if (err.message && err.message.includes('chưa được xác minh')) {
+        setNeedsVerification(true)
+      } else {
+        setError(err instanceof Error ? err.message : 'Login failed')
+      }
     } finally {
       setIsLoading(false)
     }
