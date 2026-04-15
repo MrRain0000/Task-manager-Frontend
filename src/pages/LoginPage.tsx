@@ -13,11 +13,12 @@ import {
   HStack,
   Separator,
   IconButton,
+  Icon,
 } from '@chakra-ui/react'
 import { useState } from 'react'
-import { FiEye, FiEyeOff, FiGithub } from 'react-icons/fi'
+import { FiEye, FiEyeOff, FiGithub, FiMail, FiCheckCircle } from 'react-icons/fi'
 import { FcGoogle } from 'react-icons/fc'
-import { login } from '../services/api'
+import { login, resendVerification } from '../services/api'
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -25,26 +26,46 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [needsVerification, setNeedsVerification] = useState(false)
+  const [resendSuccess, setResendSuccess] = useState(false)
+  const [isResending, setIsResending] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()  
+    e.preventDefault()
     setError('')
     setIsLoading(true)
+    setNeedsVerification(false)
 
     try {
       const response = await login({ email, password })
-      console.log('[Login] Full response:', response)
-      console.log('[Login] response.data:', response.data)
-      console.log('[Login] response.data.accessToken:', response.data?.accessToken)
-      console.log('[Login] response.data.user:', response.data?.user)
+      const user = response.data.user
+
+      // Kiểm tra nếu chưa xác thực email
+      if (user && !user.isVerified) {
+        setNeedsVerification(true)
+        setIsLoading(false)
+        return
+      }
+
       localStorage.setItem('token', response.data.accessToken)
-      localStorage.setItem('user', JSON.stringify(response.data.user || { id: 1, username: email.split('@')[0], email }))
-      console.log('[Login] Redirecting to /')
+      localStorage.setItem('user', JSON.stringify(user || { id: 1, username: email.split('@')[0], email, isVerified: true }))
       window.location.href = '/'
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Login failed')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setIsResending(true)
+    try {
+      await resendVerification(email)
+      setResendSuccess(true)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to resend verification email')
+    } finally {
+      setIsResending(false)
     }
   }
 
@@ -82,61 +103,99 @@ export default function LoginPage() {
               </Text>
             )}
 
-            <form onSubmit={handleSubmit}>
-              <VStack gap={4}>
-                <Field.Root required>
-                  <Field.Label>Email</Field.Label>
-                  <Input
-                    type="email"
-                    placeholder="you@example.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+            {needsVerification ? (
+              // UI Xác thực email
+              <VStack gap={6} align="center" p={4}>
+                <Icon as={FiMail} boxSize={12} color="orange.500" />
+                <VStack gap={2} align="center">
+                  <Heading size="md">Xác thực email của bạn</Heading>
+                  <Text color="gray.500" textAlign="center">
+                    Tài khoản của bạn chưa được xác thực. Vui lòng kiểm tra email và click vào link xác thực.
+                  </Text>
+                </VStack>
+
+                {resendSuccess ? (
+                  <VStack gap={2} align="center">
+                    <Icon as={FiCheckCircle} boxSize={8} color="green.500" />
+                    <Text color="green.500" fontSize="sm">
+                      Email xác thực đã được gửi lại. Vui lòng kiểm tra hộp thư.
+                    </Text>
+                  </VStack>
+                ) : (
+                  <Button
+                    colorPalette="brand"
                     size="lg"
-                  />
-                </Field.Root>
+                    w="full"
+                    onClick={handleResendVerification}
+                    loading={isResending}
+                    disabled={isResending}
+                  >
+                    Gửi lại email xác thực
+                  </Button>
+                )}
 
-                <Field.Root required>
-                  <Field.Label>Password</Field.Label>
-                  <Flex position="relative" w="full">
-                    <Input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder="Enter your password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      size="lg"
-                      pr="10"
-                    />
-                    <IconButton
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                      onClick={() => setShowPassword(!showPassword)}
-                      variant="ghost"
-                      position="absolute"
-                      right={2}
-                      top="50%"
-                      transform="translateY(-50%)"
-                      size="sm"
-                    >
-                      {showPassword ? <FiEyeOff /> : <FiEye />}
-                    </IconButton>
-                  </Flex>
-                </Field.Root>
-
-                <HStack justify="space-between" w="full">
-                  <Checkbox.Root>
-                    <Checkbox.HiddenInput />
-                    <Checkbox.Control />
-                    <Checkbox.Label>Remember me</Checkbox.Label>
-                  </Checkbox.Root>
-                  <Link color="brand.500" href="#">
-                    Forgot password?
-                  </Link>
-                </HStack>
-
-                <Button type="submit" colorPalette="brand" size="lg" w="full" loading={isLoading} disabled={isLoading}>
-                  Sign In
+                <Button variant="ghost" size="sm" onClick={() => setNeedsVerification(false)}>
+                  Quay lại đăng nhập
                 </Button>
               </VStack>
-            </form>
+            ) : (
+              // Form đăng nhập
+              <form onSubmit={handleSubmit}>
+                <VStack gap={4}>
+                  <Field.Root required>
+                    <Field.Label>Email</Field.Label>
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      size="lg"
+                    />
+                  </Field.Root>
+
+                  <Field.Root required>
+                    <Field.Label>Password</Field.Label>
+                    <Flex position="relative" w="full">
+                      <Input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        size="lg"
+                        pr="10"
+                      />
+                      <IconButton
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        onClick={() => setShowPassword(!showPassword)}
+                        variant="ghost"
+                        position="absolute"
+                        right={2}
+                        top="50%"
+                        transform="translateY(-50%)"
+                        size="sm"
+                      >
+                        {showPassword ? <FiEyeOff /> : <FiEye />}
+                      </IconButton>
+                    </Flex>
+                  </Field.Root>
+
+                  <HStack justify="space-between" w="full">
+                    <Checkbox.Root>
+                      <Checkbox.HiddenInput />
+                      <Checkbox.Control />
+                      <Checkbox.Label>Remember me</Checkbox.Label>
+                    </Checkbox.Root>
+                    <Link color="brand.500" href="#">
+                      Forgot password?
+                    </Link>
+                  </HStack>
+
+                  <Button type="submit" colorPalette="brand" size="lg" w="full" loading={isLoading} disabled={isLoading}>
+                    Sign In
+                  </Button>
+                </VStack>
+              </form>
+            )}
 
             <HStack>
               <Separator flex={1} />

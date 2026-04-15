@@ -140,6 +140,19 @@ export async function loginWithGoogle(idToken: string): Promise<ApiResponse<Auth
   })
 }
 
+export async function verifyEmail(token: string): Promise<ApiResponse<null>> {
+  return fetchApi<null>(`/api/auth/verify?token=${token}`, {
+    method: 'GET',
+  })
+}
+
+export async function resendVerification(email: string): Promise<ApiResponse<null>> {
+  return fetchApi<null>('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
 // Project APIs
 export async function createProject(request: CreateProjectRequest): Promise<ApiResponse<Project>> {
   return fetchApi<Project>('/api/projects', {

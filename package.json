@@ -14,6 +14,7 @@
     "vite": "^8.0.1"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.7.10",
     "@chakra-ui/react": "^3.34.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
