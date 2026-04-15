@@ -17,8 +17,9 @@ import {
 import { FiPlus, FiSearch, FiMoreHorizontal, FiCalendar, FiUser, FiFolder, FiCheckCircle, FiClock } from 'react-icons/fi'
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { getProjects, getTasks, createTask, type Project, type Task } from '../services/api'
+import { getProjects, getTasks, createTask, moveTask, type Project, type Task } from '../services/api'
 import Layout from '../components/Layout'
+import KanbanBoard from '../components/KanbanBoard'
 
 export default function ProjectDetailsPage() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -73,63 +74,27 @@ export default function ProjectDetailsPage() {
     }
   }
 
+  const handleMoveTask = async (taskId: number, toStatus: string, toPosition: number) => {
+    if (!projectId) return
+
+    try {
+      await moveTask(parseInt(projectId), taskId, {
+        toStatus: toStatus as 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED',
+        toPosition,
+      })
+      loadProjectData(parseInt(projectId))
+    } catch (error) {
+      console.error('Failed to move task:', error)
+    }
+  }
+
   const filteredTasks = tasks.filter(t =>
     t.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const todoTasks = filteredTasks.filter(t => t.status === 'TODO')
-  const inProgressTasks = filteredTasks.filter(t => t.status === 'IN_PROGRESS')
-  const doneTasks = filteredTasks.filter(t => t.status === 'DONE')
-
   const completedCount = tasks.filter(t => t.status === 'DONE').length
   const totalCount = tasks.length
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
-
-  const TaskColumn = ({ title, status, tasks: columnTasks, color }: { title: string; status: string; tasks: Task[]; color: string }) => (
-    <VStack align="stretch" gap={3} flex={1} minW="280px">
-      <HStack justify="space-between">
-        <HStack gap={2}>
-          <Box w="3px" h="20px" bg={`${color}.500`} borderRadius="full" />
-          <Text fontWeight="semibold">{title}</Text>
-          <Badge size="sm" variant="subtle">{columnTasks.length}</Badge>
-        </HStack>
-      </HStack>
-      <VStack align="stretch" gap={3}>
-        {columnTasks.map((task) => (
-          <Card.Root key={task.id} bg="white" borderRadius="xl" p={4}>
-            <HStack justify="space-between" mb={2}>
-              <Badge size="sm" variant="subtle" colorPalette={color === 'orange' ? 'orange' : color === 'blue' ? 'blue' : 'green'}>
-                {task.status.replace('_', ' ')}
-              </Badge>
-              <Icon as={FiMoreHorizontal} color="gray.400" cursor="pointer" />
-            </HStack>
-            <Text fontWeight="medium" mb={2}>{task.title}</Text>
-            <Text fontSize="sm" color="gray.500" mb={3} lineClamp={2}>
-              {task.description}
-            </Text>
-            <HStack justify="space-between" fontSize="xs" color="gray.400">
-              <HStack gap={1}>
-                <Icon as={FiCalendar} boxSize={3} />
-                <Text>Oct 18</Text>
-              </HStack>
-              {task.assigneeId ? (
-                <Avatar.Root size="xs">
-                  <Avatar.Fallback name="User" />
-                </Avatar.Root>
-              ) : (
-                <Icon as={FiUser} boxSize={3} />
-              )}
-            </HStack>
-          </Card.Root>
-        ))}
-        {columnTasks.length === 0 && (
-          <Box p={4} bg="gray.50" borderRadius="xl" border="2px dashed" borderColor="gray.200">
-            <Text fontSize="sm" color="gray.400" textAlign="center">No tasks</Text>
-          </Box>
-        )}
-      </VStack>
-    </VStack>
-  )
 
   return (
     <Layout>
@@ -221,11 +186,9 @@ export default function ProjectDetailsPage() {
             </HStack>
           </HStack>
 
-          <HStack align="start" gap={6} overflowX="auto" pb={2}>
-            <TaskColumn title="To Do" status="TODO" tasks={todoTasks} color="orange" />
-            <TaskColumn title="In Progress" status="IN_PROGRESS" tasks={inProgressTasks} color="blue" />
-            <TaskColumn title="Done" status="DONE" tasks={doneTasks} color="green" />
-          </HStack>
+          <Box h="500px">
+            <KanbanBoard tasks={filteredTasks} onMoveTask={handleMoveTask} />
+          </Box>
         </Card.Root>
 
         {/* Project Guidelines & Team Activity */}
