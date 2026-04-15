@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://task-managementclean-architecture-production.up.railway.app'
+const API_BASE_URL = 'http://localhost:8080'
 
 function getToken(): string | null {
   return localStorage.getItem('token')
