@@ -1,5 +1,6 @@
 import { Box, Badge, Text, HStack, Avatar, VStack } from '@chakra-ui/react'
 import { FiCalendar, FiUser } from 'react-icons/fi'
+<<<<<<< HEAD
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
 import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
@@ -12,6 +13,16 @@ interface KanbanBoardProps {
   members: ProjectMember[]
   onMoveTask: (taskId: number, fromStatus: string, toStatus: string, toPosition: number) => Promise<void>
   onTaskUpdated?: (task: Task) => void
+=======
+import { useState, useEffect, useRef } from 'react'
+import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine'
+import { draggable, dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter'
+import type { Task } from '../services/api'
+
+interface KanbanBoardProps {
+  tasks: Task[]
+  onMoveTask: (taskId: number, toStatus: string, toPosition: number) => void
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
 }
 
 interface Column {
@@ -27,6 +38,7 @@ const COLUMNS: Column[] = [
   { id: 'CANCELLED', title: 'Cancelled', color: 'red' },
 ]
 
+<<<<<<< HEAD
 // Drop indicator component
 function DropIndicator({ isVisible }: { isVisible: boolean }) {
   if (!isVisible) return null
@@ -52,6 +64,9 @@ function TaskCard({
   columnId: string
   onClick?: () => void
 }) {
+=======
+function TaskCard({ task, onDragStart }: { task: Task; onDragStart: (task: Task) => void }) {
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
   const ref = useRef<HTMLDivElement>(null)
   const [isDragging, setIsDragging] = useState(false)
 
@@ -62,6 +77,7 @@ function TaskCard({
     return combine(
       draggable({
         element,
+<<<<<<< HEAD
         getInitialData: () => ({
           task,
           index,
@@ -73,6 +89,17 @@ function TaskCard({
       })
     )
   }, [task, index, columnId])
+=======
+        getInitialData: () => ({ task }),
+        onDragStart: () => {
+          setIsDragging(true)
+          onDragStart(task)
+        },
+        onDrop: () => setIsDragging(false),
+      })
+    )
+  }, [task, onDragStart])
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
 
   const statusColors: Record<string, string> = {
     TODO: 'orange',
@@ -91,6 +118,7 @@ function TaskCard({
       border="1px solid"
       borderColor="gray.100"
       cursor="grab"
+<<<<<<< HEAD
       opacity={isDragging ? 0.4 : 1}
       _hover={{ boxShadow: 'md', borderColor: 'gray.200' }}
       transition="all 0.2s"
@@ -100,6 +128,10 @@ function TaskCard({
           onClick()
         }
       }}
+=======
+      opacity={isDragging ? 0.5 : 1}
+      _hover={{ boxShadow: 'md' }}
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
     >
       <HStack justify="space-between" mb={2}>
         <Badge size="sm" variant="subtle" colorPalette={statusColors[task.status]}>
@@ -130,6 +162,7 @@ function TaskCard({
 function KanbanColumn({
   column,
   tasks,
+<<<<<<< HEAD
   onMoveTask,
   isLoading,
   onTaskClick,
@@ -147,6 +180,16 @@ function KanbanColumn({
 
   // Keep tasks ref up to date without triggering effect
   tasksRef.current = tasks
+=======
+  onDrop,
+}: {
+  column: Column
+  tasks: Task[]
+  onDrop: (taskId: number, toPosition: number) => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [isOver, setIsOver] = useState(false)
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
 
   useEffect(() => {
     const element = ref.current
@@ -156,6 +199,7 @@ function KanbanColumn({
       dropTargetForElements({
         element,
         onDragEnter: () => setIsOver(true),
+<<<<<<< HEAD
         onDragLeave: () => {
           setIsOver(false)
           setDropIndex(null)
@@ -229,6 +273,17 @@ function KanbanColumn({
       })
     )
   }, [column.id, onMoveTask])
+=======
+        onDragLeave: () => setIsOver(false),
+        onDrop: ({ source }) => {
+          setIsOver(false)
+          const task = (source.data as any).task as Task
+          onDrop(task.id, tasks.length)
+        },
+      })
+    )
+  }, [column.id, tasks.length, onDrop])
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
 
   const colorMap: Record<string, string> = {
     orange: '#ED8936',
@@ -237,6 +292,7 @@ function KanbanColumn({
     red: '#F56565',
   }
 
+<<<<<<< HEAD
   // Render tasks with drop indicators
   const renderTasks = () => {
     const elements: React.ReactNode[] = []
@@ -272,6 +328,8 @@ function KanbanColumn({
     return elements
   }
 
+=======
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
   return (
     <VStack
       ref={ref}
@@ -285,7 +343,10 @@ function KanbanColumn({
       border="2px dashed"
       borderColor={isOver ? 'blue.300' : 'transparent'}
       transition="all 0.2s"
+<<<<<<< HEAD
       opacity={isLoading ? 0.7 : 1}
+=======
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
     >
       <HStack gap={2} mb={1}>
         <Box w="3px" h="20px" bg={colorMap[column.color]} borderRadius="full" />
@@ -293,6 +354,7 @@ function KanbanColumn({
         <Badge size="sm" variant="subtle">{tasks.length}</Badge>
       </HStack>
 
+<<<<<<< HEAD
       <VStack align="stretch" gap={2} minH="100px">
         {tasks.length === 0 && !isOver ? (
           <Box
@@ -302,18 +364,30 @@ function KanbanColumn({
             border="2px dashed"
             borderColor="gray.200"
           >
+=======
+      <VStack align="stretch" gap={3} minH="100px">
+        {tasks.map((task) => (
+          <TaskCard key={task.id} task={task} onDragStart={() => {}} />
+        ))}
+        {tasks.length === 0 && (
+          <Box p={4} bg="white" borderRadius="xl" border="2px dashed" borderColor="gray.200">
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
             <Text fontSize="sm" color="gray.400" textAlign="center">
               Drop tasks here
             </Text>
           </Box>
+<<<<<<< HEAD
         ) : (
           renderTasks()
+=======
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
         )}
       </VStack>
     </VStack>
   )
 }
 
+<<<<<<< HEAD
 export default function KanbanBoard({
   tasks,
   projectId,
@@ -346,6 +420,11 @@ export default function KanbanBoard({
 
   const handleTaskUpdated = (updatedTask: Task) => {
     onTaskUpdated?.(updatedTask)
+=======
+export default function KanbanBoard({ tasks, onMoveTask }: KanbanBoardProps) {
+  const handleDrop = (columnId: string, taskId: number, toPosition: number) => {
+    onMoveTask(taskId, columnId, toPosition)
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
   }
 
   return (
@@ -360,6 +439,7 @@ export default function KanbanBoard({
             key={column.id}
             column={column}
             tasks={columnTasks}
+<<<<<<< HEAD
             onMoveTask={handleMoveTask}
             isLoading={movingTaskId !== null}
             onTaskClick={handleTaskClick}
@@ -377,6 +457,12 @@ export default function KanbanBoard({
           onTaskUpdated={handleTaskUpdated}
         />
       )}
+=======
+            onDrop={(taskId, toPosition) => handleDrop(column.id, taskId, toPosition)}
+          />
+        )
+      })}
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
     </HStack>
   )
 }

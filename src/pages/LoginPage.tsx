@@ -13,12 +13,16 @@ import {
   HStack,
   Separator,
   IconButton,
+  Icon,
 } from '@chakra-ui/react'
 import { useState } from 'react'
 import { FiEye, FiEyeOff, FiGithub, FiMail, FiCheckCircle } from 'react-icons/fi'
 import { FcGoogle } from 'react-icons/fc'
 import { login, resendVerification } from '../services/api'
+<<<<<<< HEAD
 import { Icon } from '@chakra-ui/react'
+=======
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
@@ -39,11 +43,28 @@ export default function LoginPage() {
     try {
       // API: POST /api/auth/login → { accessToken, tokenType }
       const response = await login({ email, password })
+<<<<<<< HEAD
       localStorage.setItem('token', response.data.accessToken)
       localStorage.setItem('user', JSON.stringify({ id: 0, username: email.split('@')[0], email, isVerified: true }))
       window.location.href = '/'
     } catch (err: any) {
       // Backend trả 403 khi chưa xác thực email
+=======
+      const user = response.data.user
+
+      // Kiểm tra nếu chưa xác thực email (trường hợp API vẫn trả về 200)
+      if (user && !user.isVerified) {
+        setNeedsVerification(true)
+        setIsLoading(false)
+        return
+      }
+
+      localStorage.setItem('token', response.data.accessToken)
+      localStorage.setItem('user', JSON.stringify(user || { id: 1, username: email.split('@')[0], email, isVerified: true }))
+      window.location.href = '/'
+    } catch (err: any) {
+      // Backend trả 403 Forbidden khi chưa xác thực email
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
       if (err.message && err.message.includes('chưa được xác minh')) {
         setNeedsVerification(true)
       } else {
@@ -101,11 +122,20 @@ export default function LoginPage() {
             )}
 
             {needsVerification ? (
+<<<<<<< HEAD
               <VStack gap={6} align="center" p={4} bg="orange.50" borderRadius="xl">
                 <Icon as={FiMail} boxSize={12} color="orange.500" />
                 <VStack gap={2} align="center">
                   <Heading size="md">Xác thực email của bạn</Heading>
                   <Text color="gray.500" textAlign="center" fontSize="sm">
+=======
+              // UI Xác thực email
+              <VStack gap={6} align="center" p={4}>
+                <Icon as={FiMail} boxSize={12} color="orange.500" />
+                <VStack gap={2} align="center">
+                  <Heading size="md">Xác thực email của bạn</Heading>
+                  <Text color="gray.500" textAlign="center">
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
                     Tài khoản của bạn chưa được xác thực. Vui lòng kiểm tra email và click vào link xác thực.
                   </Text>
                 </VStack>
@@ -135,8 +165,13 @@ export default function LoginPage() {
                 </Button>
               </VStack>
             ) : (
+<<<<<<< HEAD
               <>
                 <form onSubmit={handleSubmit}>
+=======
+              // Form đăng nhập
+              <form onSubmit={handleSubmit}>
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
                 <VStack gap={4}>
                   <Field.Root required>
                     <Field.Label>Email</Field.Label>
@@ -148,6 +183,53 @@ export default function LoginPage() {
                       size="lg"
                     />
                   </Field.Root>
+<<<<<<< HEAD
+=======
+
+                  <Field.Root required>
+                    <Field.Label>Password</Field.Label>
+                    <Flex position="relative" w="full">
+                      <Input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="Enter your password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        size="lg"
+                        pr="10"
+                      />
+                      <IconButton
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                        onClick={() => setShowPassword(!showPassword)}
+                        variant="ghost"
+                        position="absolute"
+                        right={2}
+                        top="50%"
+                        transform="translateY(-50%)"
+                        size="sm"
+                      >
+                        {showPassword ? <FiEyeOff /> : <FiEye />}
+                      </IconButton>
+                    </Flex>
+                  </Field.Root>
+
+                  <HStack justify="space-between" w="full">
+                    <Checkbox.Root>
+                      <Checkbox.HiddenInput />
+                      <Checkbox.Control />
+                      <Checkbox.Label>Remember me</Checkbox.Label>
+                    </Checkbox.Root>
+                    <Link color="brand.500" href="#">
+                      Forgot password?
+                    </Link>
+                  </HStack>
+
+                  <Button type="submit" colorPalette="brand" size="lg" w="full" loading={isLoading} disabled={isLoading}>
+                    Sign In
+                  </Button>
+                </VStack>
+              </form>
+            )}
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
 
                   <Field.Root required>
                     <Field.Label>Password</Field.Label>

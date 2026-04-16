@@ -16,7 +16,11 @@ import {
 import { FiPlus, FiSearch, FiFolder, FiCheckCircle, FiClock } from 'react-icons/fi'
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
+<<<<<<< HEAD
 import { getProjects, getTasks, getProjectDetail, createTask, moveTask, type Project, type Task, type ProjectMember } from '../services/api'
+=======
+import { getProjects, getTasks, createTask, moveTask, type Project, type Task } from '../services/api'
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
 import Layout from '../components/Layout'
 import KanbanBoard from '../components/KanbanBoard'
 
@@ -78,10 +82,25 @@ export default function ProjectDetailsPage() {
     }
   }
 
+  const handleMoveTask = async (taskId: number, toStatus: string, toPosition: number) => {
+    if (!projectId) return
+
+    try {
+      await moveTask(parseInt(projectId), taskId, {
+        toStatus: toStatus as 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED',
+        toPosition,
+      })
+      loadProjectData(parseInt(projectId))
+    } catch (error) {
+      console.error('Failed to move task:', error)
+    }
+  }
+
   const filteredTasks = tasks.filter(t =>
     t.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+<<<<<<< HEAD
   const handleMoveTask = async (taskId: number, fromStatus: string, toStatus: string, toPosition: number) => {
     if (!projectId) return
     try {
@@ -107,11 +126,16 @@ export default function ProjectDetailsPage() {
     }
   }
 
+=======
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
   const completedCount = tasks.filter(t => t.status === 'DONE').length
   const totalCount = tasks.length
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
   return (
     <Layout>
       <VStack align="stretch" gap={6}>
@@ -212,6 +236,7 @@ export default function ProjectDetailsPage() {
             </HStack>
           </HStack>
 
+<<<<<<< HEAD
           {isLoading ? (
             <Text color="gray.400" textAlign="center" py={8}>Loading tasks...</Text>
           ) : (
@@ -222,6 +247,11 @@ export default function ProjectDetailsPage() {
               onMoveTask={handleMoveTask}
             />
           )}
+=======
+          <Box h="500px">
+            <KanbanBoard tasks={filteredTasks} onMoveTask={handleMoveTask} />
+          </Box>
+>>>>>>> 1d16fd10c4ca85de4aed424d02f71d2b8f4fed68
         </Card.Root>
 
         {/* Project Guidelines & Team Activity */}
