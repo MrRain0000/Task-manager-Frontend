@@ -17,11 +17,11 @@ import {
   Field,
   Spinner,
 } from '@chakra-ui/react'
-import { FiPlus, FiMoreVertical, FiUserCheck, FiShield, FiUsers, FiMail, FiSend, FiX } from 'react-icons/fi'
+import { FiPlus, FiMoreVertical, FiUserCheck, FiShield, FiUsers, FiMail, FiSend, FiX, FiCheckCircle } from 'react-icons/fi'
 import { useState, useEffect } from 'react'
 import {
   getProjects,
-  getProjectMembers,
+  getProjectDetail,
   inviteMember,
   type Project,
   type ProjectMember,
@@ -64,12 +64,19 @@ export default function TeamPage() {
   const loadProjects = async () => {
     try {
       const response = await getProjects()
-      setProjects(response.data)
-      if (response.data.length > 0) {
-        setSelectedProject(response.data[0])
-        loadMembers(response.data[0].id)
+      const projectsList = response.data.projects || []
+      setProjects(projectsList)
+      if (projectsList.length > 0) {
+        setSelectedProject(projectsList[0])
+        // Chỉ load members nếu có quyền (không phải 403)
+        await loadMembers(projectsList[0].id)
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.status === 429) {
+        showToast('Quá nhiều yêu cầu. Vui lòng thử lại sau.', false)
+      } else {
+        showToast('Không thể tải danh sách dự án.', false)
+      }
       console.error('Failed to load projects:', error)
     } finally {
       setIsLoading(false)
@@ -78,16 +85,24 @@ export default function TeamPage() {
 
   const loadMembers = async (projectId: number) => {
     try {
-      const response = await getProjectMembers(projectId)
-      setMembers(response.data)
-    } catch (error) {
-      console.error('Failed to load members:', error)
+      const response = await getProjectDetail(projectId)
+      setMembers(response.data.members || [])
+    } catch (error: any) {
+      if (error?.status === 403) {
+        showToast('Bạn chưa chấp nhận lời mời vào dự án này.', false)
+      } else if (error?.status === 429) {
+        showToast('Quá nhiều yêu cầu. Vui lòng chờ.', false)
+      } else {
+        console.error('Failed to load members:', error)
+      }
+      setMembers([])
     }
   }
 
-  const handleProjectChange = (project: Project) => {
+  const handleProjectChange = async (project: Project) => {
     setSelectedProject(project)
-    loadMembers(project.id)
+    setMembers([]) // Clear trước khi load
+    await loadMembers(project.id)
   }
 
   const handleInvite = async () => {
@@ -97,14 +112,14 @@ export default function TeamPage() {
     try {
       await inviteMember(selectedProject.id, inviteEmail.trim())
       setInviteStatus({ type: 'success', msg: `Invitation sent to ${inviteEmail}!` })
+      showToast(`Invitation sent to ${inviteEmail}!`, true)
       setInviteEmail('')
       // reload members after short delay
       setTimeout(() => loadMembers(selectedProject.id), 1000)
     } catch (error: any) {
-      setInviteStatus({
-        type: 'error',
-        msg: error?.message || 'Failed to send invitation.',
-      })
+      const errorMsg = error?.message || 'Failed to send invitation.'
+      setInviteStatus({ type: 'error', msg: errorMsg })
+      showToast(errorMsg, false)
     } finally {
       setIsSending(false)
     }
@@ -122,8 +137,8 @@ export default function TeamPage() {
       m?.email?.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const activeMembers = members.filter((m) => m?.status === 'ACCEPTED').length
-  const pendingInvites = members.filter((m) => m?.status === 'PENDING').length
+  const activeMembers = members.filter((m) => m?.invitationStatus === 'ACCEPTED').length
+  const pendingInvites = members.filter((m) => m?.invitationStatus === 'PENDING').length
 
   return (
     <Layout>
@@ -333,7 +348,7 @@ export default function TeamPage() {
             ) : (
               filteredMembers.map((member, idx) => (
                 <HStack
-                  key={member?.id || idx}
+                  key={member?.userId || idx}
                   px={6}
                   py={4}
                   align="center"
@@ -344,17 +359,39 @@ export default function TeamPage() {
                 >
                   <Box flex={2}>
                     <HStack gap={3}>
-                      <Avatar.Root size="sm">
-                        <Avatar.Fallback
-                          name={member?.username || 'Unknown'}
-                          bg="blue.100"
-                          color="blue.700"
-                        />
-                      </Avatar.Root>
+                      <Box position="relative">
+                        <Avatar.Root size="sm">
+                          <Avatar.Fallback
+                            name={member?.username || 'Unknown'}
+                            bg={member?.isVerified ? 'green.100' : 'blue.100'}
+                            color={member?.isVerified ? 'green.700' : 'blue.700'}
+                          />
+                        </Avatar.Root>
+                        {member?.isVerified && (
+                          <Box
+                            position="absolute"
+                            bottom="-2px"
+                            right="-2px"
+                            bg="green.500"
+                            borderRadius="full"
+                            p="2px"
+                            border="2px solid white"
+                          >
+                            <Icon as={FiCheckCircle} color="white" boxSize={2} />
+                          </Box>
+                        )}
+                      </Box>
                       <Box>
-                        <Text fontWeight="semibold" fontSize="sm">
-                          {member?.username || 'Unknown'}
-                        </Text>
+                        <HStack gap={1} align="center">
+                          <Text fontWeight="semibold" fontSize="sm">
+                            {member?.username || 'Unknown'}
+                          </Text>
+                          {member?.isVerified && (
+                            <Badge size="xs" colorPalette="green" variant="subtle">
+                              Đã xác thực
+                            </Badge>
+                          )}
+                        </HStack>
                         <Text fontSize="xs" color="gray.500">
                           {member?.email || ''}
                         </Text>
@@ -374,18 +411,18 @@ export default function TeamPage() {
                     <Badge
                       size="sm"
                       colorPalette={
-                        member?.status === 'ACCEPTED'
+                        member?.invitationStatus === 'ACCEPTED'
                           ? 'green'
-                          : member?.status === 'PENDING'
+                          : member?.invitationStatus === 'PENDING'
                           ? 'orange'
                           : 'red'
                       }
                       variant="subtle"
                     >
-                      {member?.status === 'ACCEPTED' && (
+                      {member?.invitationStatus === 'ACCEPTED' && (
                         <Icon as={FiUserCheck} boxSize={3} />
                       )}
-                      {member?.status || 'UNKNOWN'}
+                      {member?.invitationStatus || 'UNKNOWN'}
                     </Badge>
                   </Box>
                   <Box w="40px">
@@ -489,7 +526,8 @@ export default function TeamPage() {
                       onKeyDown={(e) => e.key === 'Enter' && handleInvite()}
                       size="md"
                       borderRadius="lg"
-                      focusBorderColor="blue.400"
+                      borderColor="gray.200"
+                      _focus={{ borderColor: 'blue.400' }}
                     />
                   </Field.Root>
 

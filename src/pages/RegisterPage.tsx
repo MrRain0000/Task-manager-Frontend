@@ -13,13 +13,18 @@ import {
   HStack,
   Separator,
   IconButton,
+  Dialog,
+  Portal,
+  Icon,
 } from '@chakra-ui/react'
 import { useState } from 'react'
-import { FiEye, FiEyeOff, FiGithub } from 'react-icons/fi'
+import { FiEye, FiEyeOff, FiGithub, FiCheckCircle, FiMail } from 'react-icons/fi'
 import { FcGoogle } from 'react-icons/fc'
 import { register } from '../services/api'
+import { useNavigate } from 'react-router-dom'
 
 export default function RegisterPage() {
+  const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [name, setName] = useState('')
@@ -28,6 +33,8 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showSuccess, setShowSuccess] = useState(false)
+  const [successMessage, setSuccessMessage] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -42,9 +49,8 @@ export default function RegisterPage() {
 
     try {
       const response = await register({ username: name, email, password })
-      localStorage.setItem('token', response.data.accessToken)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
-      window.location.href = '/'
+      setSuccessMessage(response.message || 'Đăng ký thành công')
+      setShowSuccess(true)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Registration failed')
     } finally {
@@ -54,6 +60,43 @@ export default function RegisterPage() {
 
   return (
     <Flex minH="100vh" bg="gray.50">
+      {/* Dialog xác nhận đăng ký thành công */}
+      <Dialog.Root open={showSuccess} onOpenChange={(e) => { if (!e.open) { setShowSuccess(false); navigate('/login') } }}>
+        <Portal>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content borderRadius="2xl" p={6}>
+              <Dialog.Header>
+                <VStack gap={4} align="center">
+                  <Icon as={FiCheckCircle} boxSize={12} color="green.500" />
+                  <Dialog.Title textAlign="center" fontSize="xl" fontWeight="bold">
+                    Đăng ký thành công!
+                  </Dialog.Title>
+                </VStack>
+              </Dialog.Header>
+              <Dialog.Body>
+                <VStack gap={3} align="center">
+                  <Text textAlign="center" color="gray.600">
+                    {successMessage}
+                  </Text>
+                  <HStack gap={2} align="center" bg="blue.50" p={3} borderRadius="lg" w="full">
+                    <Icon as={FiMail} boxSize={5} color="blue.500" />
+                    <Text fontSize="sm" color="blue.600">
+                      Đã gửi link xác thực qua email. Vui lòng kiểm tra hộp thư của bạn.
+                    </Text>
+                  </HStack>
+                </VStack>
+              </Dialog.Body>
+              <Dialog.Footer justifyContent="center">
+                <Button colorPalette="brand" size="lg" w="full" onClick={() => { setShowSuccess(false); navigate('/login') }}>
+                  OK
+                </Button>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
+
       {/* Left side - Illustration */}
       <Box
         display={{ base: 'none', lg: 'flex' }}

@@ -20,8 +20,8 @@ import {
   FiHelpCircle,
   FiLogOut,
 } from 'react-icons/fi'
-import { useState } from 'react'
-import type { User } from '../services/api'
+import { useState, useEffect } from 'react'
+import { getMyInvitations, type User } from '../services/api'
 
 interface LayoutProps {
   children: React.ReactNode
@@ -30,12 +30,13 @@ interface LayoutProps {
 const navItems = [
   { path: '/', icon: FiGrid, label: 'Dashboard' },
   { path: '/projects', icon: FiFolder, label: 'Projects' },
-  { path: '/invitations', icon: FiMail, label: 'Invitations' },
+  { path: '/invitations', icon: FiMail, label: 'Invitations', badge: 'invitationCount' },
   { path: '/team', icon: FiUsers, label: 'Team' },
 ]
 
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
+  const [invitationCount, setInvitationCount] = useState(0)
   const [user] = useState<User | null>(() => {
     // Read localStorage synchronously during initialization
     const userData = localStorage.getItem('user')
@@ -54,6 +55,30 @@ export default function Layout({ children }: LayoutProps) {
     console.log('[Layout] No valid user data found')
     return null
   })
+
+  // Load invitation count for badge (chỉ khi vào trang, không polling)
+  useEffect(() => {
+    const loadInvitationCount = async () => {
+      try {
+        const invitations = await getMyInvitations()
+        const pendingCount = Array.isArray(invitations)
+          ? invitations.filter((i) => i.status === 'PENDING').length
+          : 0
+        setInvitationCount(pendingCount)
+      } catch (error: any) {
+        // Ignore 429 errors
+        if (error?.status === 429) {
+          console.log('Rate limited, skipping invitation refresh')
+        } else {
+          console.error('Failed to load invitation count:', error)
+        }
+      }
+    }
+
+    if (localStorage.getItem('token')) {
+      loadInvitationCount()
+    }
+  }, [location.pathname])
 
   const handleLogout = () => {
     localStorage.removeItem('token')
@@ -110,6 +135,7 @@ export default function Layout({ children }: LayoutProps) {
             </Text>
             {navItems.map((item) => {
               const isActive = location.pathname === item.path
+              const count = item.badge === 'invitationCount' ? invitationCount : 0
               return (
                 <Link key={item.path} to={item.path} style={{ textDecoration: 'none' }}>
                   <Box
@@ -129,6 +155,18 @@ export default function Layout({ children }: LayoutProps) {
                   >
                     <Icon as={item.icon} boxSize={5} />
                     <Text>{item.label}</Text>
+                    {count > 0 && (
+                      <Badge
+                        colorPalette="red"
+                        variant="solid"
+                        size="sm"
+                        borderRadius="full"
+                        minW="20px"
+                        textAlign="center"
+                      >
+                        {count}
+                      </Badge>
+                    )}
                   </Box>
                 </Link>
               )
@@ -220,7 +258,6 @@ export default function Layout({ children }: LayoutProps) {
           alignItems="center"
           gap={4}
         >
-          <Icon as={FiMail} boxSize={5} color="gray.500" cursor="pointer" />
           <Icon as={FiSettings} boxSize={5} color="gray.500" cursor="pointer" />
           <HStack gap={3}>
             <Avatar.Root size="sm">

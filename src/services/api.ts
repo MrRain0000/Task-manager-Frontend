@@ -1,4 +1,4 @@
-const API_BASE_URL = 'https://task-managementclean-architecture-production.up.railway.app'
+const API_BASE_URL = 'http://localhost:8080'
 
 function getToken(): string | null {
   return localStorage.getItem('token')
@@ -20,9 +20,23 @@ interface CreateProjectRequest {
   description: string
 }
 
+interface UpdateProjectRequest {
+  name: string
+  description: string
+}
+
 interface CreateTaskRequest {
   title: string
   description: string
+}
+
+interface UpdateTaskRequest {
+  title: string
+  description: string
+}
+
+interface UpdateTaskStatusRequest {
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
 }
 
 interface MoveTaskRequest {
@@ -53,7 +67,7 @@ export interface User {
 
 interface AuthData {
   accessToken: string
-  user: User
+  tokenType: string
 }
 
 export interface Project {
@@ -62,7 +76,8 @@ export interface Project {
   description: string
   ownerId: number
   createdAt: string
-  updatedAt: string
+  memberCount?: number
+  members?: { userId: number; username: string; isVerified?: boolean }[]
 }
 
 export interface Task {
@@ -84,12 +99,37 @@ export interface Invitation {
 }
 
 export interface ProjectMember {
-  id: number
   userId: number
   username: string
   email: string
   role: 'OWNER' | 'MEMBER'
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED'
+  invitationStatus: 'PENDING' | 'ACCEPTED' | 'REJECTED'
+  isVerified?: boolean
+}
+
+export interface ProjectDetail extends Project {
+  members: ProjectMember[]
+  taskSummary: {
+    totalTasks: number
+    todoCount: number
+    inProgressCount: number
+    doneCount: number
+    cancelledCount: number
+  }
+}
+
+export interface ActivityLog {
+  id: number
+  user: {
+    id: number
+    username: string
+  }
+  actionType: string
+  entityType: string
+  entityId: number
+  description: string
+  metadata: Record<string, any>
+  createdAt: string
 }
 
 async function fetchApi<T>(
@@ -112,7 +152,9 @@ async function fetchApi<T>(
   const data = await response.json()
 
   if (!response.ok) {
-    throw new Error(data.message || `HTTP error! status: ${response.status}`)
+    const error = new Error(data.message || `HTTP error! status: ${response.status}`)
+    ;(error as any).status = response.status
+    throw error
   }
 
   return data
@@ -126,8 +168,8 @@ export async function login(request: LoginRequest): Promise<ApiResponse<AuthData
   })
 }
 
-export async function register(request: RegisterRequest): Promise<ApiResponse<AuthData>> {
-  return fetchApi<AuthData>('/api/auth/register', {
+export async function register(request: RegisterRequest): Promise<ApiResponse<{ id: number; username: string; email: string }>> {
+  return fetchApi<{ id: number; username: string; email: string }>('/api/auth/register', {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -140,10 +182,36 @@ export async function loginWithGoogle(idToken: string): Promise<ApiResponse<Auth
   })
 }
 
+export async function verifyEmail(token: string): Promise<ApiResponse<null>> {
+  return fetchApi<null>(`/api/auth/verify?token=${token}`, {
+    method: 'GET',
+  })
+}
+
+export async function resendVerification(email: string): Promise<ApiResponse<null>> {
+  return fetchApi<null>('/api/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
 // Project APIs
+export async function getProjects(): Promise<ApiResponse<{ projects: Project[]; totalProjects: number }>> {
+  return fetchApi<{ projects: Project[]; totalProjects: number }>('/api/projects', {
+    method: 'GET',
+  })
+}
+
 export async function createProject(request: CreateProjectRequest): Promise<ApiResponse<Project>> {
   return fetchApi<Project>('/api/projects', {
     method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function updateProject(projectId: number, request: UpdateProjectRequest): Promise<ApiResponse<Project>> {
+  return fetchApi<Project>(`/api/projects/${projectId}`, {
+    method: 'PUT',
     body: JSON.stringify(request),
   })
 }
@@ -154,20 +222,7 @@ export async function deleteProject(projectId: number): Promise<ApiResponse<null
   })
 }
 
-export async function getProjects(): Promise<ApiResponse<Project[]>> {
-  return fetchApi<Project[]>('/api/projects', {
-    method: 'GET',
-  })
-}
-
 // Task APIs
-export async function createTask(projectId: number, request: CreateTaskRequest): Promise<ApiResponse<Task>> {
-  return fetchApi<Task>(`/api/projects/${projectId}/tasks`, {
-    method: 'POST',
-    body: JSON.stringify(request),
-  })
-}
-
 export async function getTasks(projectId: number, status?: string): Promise<ApiResponse<Task[]>> {
   const query = status ? `?status=${status}` : ''
   return fetchApi<Task[]>(`/api/projects/${projectId}/tasks${query}`, {
@@ -175,8 +230,21 @@ export async function getTasks(projectId: number, status?: string): Promise<ApiR
   })
 }
 
-export async function moveTask(projectId: number, taskId: number, request: MoveTaskRequest): Promise<ApiResponse<Task>> {
-  return fetchApi<Task>(`/api/projects/${projectId}/tasks/${taskId}/move`, {
+export async function getTaskDetail(projectId: number, taskId: number): Promise<ApiResponse<Task & { project: { id: number; name: string }; assignee: { id: number; username: string; email: string } | null }>> {
+  return fetchApi<Task & { project: { id: number; name: string }; assignee: { id: number; username: string; email: string } | null }>(`/api/projects/${projectId}/tasks/${taskId}`, {
+    method: 'GET',
+  })
+}
+
+export async function createTask(projectId: number, request: CreateTaskRequest): Promise<ApiResponse<Task>> {
+  return fetchApi<Task>(`/api/projects/${projectId}/tasks`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function moveTask(projectId: number, taskId: number, request: MoveTaskRequest): Promise<ApiResponse<Task[]>> {
+  return fetchApi<Task[]>(`/api/projects/${projectId}/tasks/${taskId}/move`, {
     method: 'POST',
     body: JSON.stringify(request),
   })
@@ -189,18 +257,48 @@ export async function assignTask(projectId: number, taskId: number, request: Ass
   })
 }
 
+export async function updateTask(projectId: number, taskId: number, request: UpdateTaskRequest): Promise<ApiResponse<Task>> {
+  return fetchApi<Task>(`/api/projects/${projectId}/tasks/${taskId}`, {
+    method: 'PUT',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function updateTaskStatus(projectId: number, taskId: number, request: UpdateTaskStatusRequest): Promise<ApiResponse<Task>> {
+  return fetchApi<Task>(`/api/projects/${projectId}/tasks/${taskId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify(request),
+  })
+}
+
 // Invitation APIs
-export async function inviteMember(projectId: number, inviteeEmail: string): Promise<ApiResponse<Invitation>> {
-  return fetchApi<Invitation>(`/api/projects/${projectId}/invite`, {
+export async function inviteMember(projectId: number, inviteeEmail: string): Promise<ApiResponse<null>> {
+  return fetchApi<null>(`/api/projects/${projectId}/invite`, {
     method: 'POST',
     body: JSON.stringify({ inviteeEmail }),
   })
 }
 
-export async function getMyInvitations(): Promise<ApiResponse<Invitation[]>> {
-  return fetchApi<Invitation[]>('/api/users/me/invitations', {
-    method: 'GET',
-  })
+export async function getMyInvitations(): Promise<Invitation[]> {
+  const url = `${API_BASE_URL}/api/users/me/invitations`
+  const token = getToken()
+
+  const config: RequestInit = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+    },
+  }
+
+  const response = await fetch(url, config)
+  const data = await response.json()
+
+  if (!response.ok) {
+    throw new Error(data.message || `HTTP error! status: ${response.status}`)
+  }
+
+  // API trả về array trực tiếp, không bọc trong ApiResponse
+  return data
 }
 
 export async function respondToInvitation(projectId: number, request: RespondInvitationRequest): Promise<ApiResponse<null>> {
@@ -210,9 +308,28 @@ export async function respondToInvitation(projectId: number, request: RespondInv
   })
 }
 
-// Team/Members APIs
-export async function getProjectMembers(projectId: number): Promise<ApiResponse<ProjectMember[]>> {
-  return fetchApi<ProjectMember[]>(`/api/projects/${projectId}/members`, {
+// Project Detail API (includes members)
+export async function getProjectDetail(projectId: number): Promise<ApiResponse<ProjectDetail>> {
+  return fetchApi<ProjectDetail>(`/api/projects/${projectId}`, {
+    method: 'GET',
+  })
+}
+
+// Activity Logs APIs
+export async function getActivityLogs(projectId: number, page: number = 0, size: number = 20): Promise<ApiResponse<{
+  content: ActivityLog[]
+  totalElements: number
+  totalPages: number
+  size: number
+  number: number
+}>> {
+  return fetchApi<{
+    content: ActivityLog[]
+    totalElements: number
+    totalPages: number
+    size: number
+    number: number
+  }>(`/api/projects/${projectId}/activity-logs?page=${page}&size=${size}`, {
     method: 'GET',
   })
 }

@@ -15,12 +15,6 @@ import { useState, useEffect } from 'react'
 import { getMyInvitations, respondToInvitation, type Invitation } from '../services/api'
 import Layout from '../components/Layout'
 
-function timeAgo(dateStr?: string): string {
-  // API doesn't return date, use placeholder labels
-  const labels = ['NEW', '2 DAYS AGO', 'LAST WEEK', '3 DAYS AGO', 'YESTERDAY']
-  return labels[Math.floor(Math.random() * labels.length)]
-}
-
 const PROJECT_ICONS = [
   { bg: 'blue.100', color: 'blue.600', icon: FiBriefcase },
   { bg: 'orange.100', color: 'orange.600', icon: FiMail },
@@ -46,9 +40,9 @@ export default function InvitationsPage() {
   const loadInvitations = async () => {
     setIsLoading(true)
     try {
-      const response = await getMyInvitations()
-      const pending = Array.isArray(response.data)
-        ? response.data.filter((i) => i.status === 'PENDING')
+      const invitationsList = await getMyInvitations()
+      const pending = Array.isArray(invitationsList)
+        ? invitationsList.filter((i) => i.status === 'PENDING')
         : []
       setInvitations(pending)
     } catch (error) {
@@ -63,7 +57,7 @@ export default function InvitationsPage() {
     setTimeout(() => setToastMsg(null), 3000)
   }
 
-  const handleRespond = async (projectId: number, accept: boolean) => {
+  const handleRespond = async (invitationId: number, projectId: number, accept: boolean) => {
     setProcessingId(projectId)
     try {
       await respondToInvitation(projectId, { isAccept: accept })
@@ -71,7 +65,8 @@ export default function InvitationsPage() {
         accept ? 'Invitation accepted successfully!' : 'Invitation rejected.',
         accept
       )
-      await loadInvitations()
+      // Remove responded invitation from list immediately
+      setInvitations(prev => prev.filter(inv => inv.id !== invitationId))
     } catch (error: any) {
       showToast(error?.message || 'Something went wrong.', false)
       console.error('Failed to respond to invitation:', error)
@@ -229,8 +224,7 @@ export default function InvitationsPage() {
                         size="sm"
                         colorPalette="gray"
                         disabled={isProcessing}
-                        loading={isProcessing && false}
-                        onClick={() => handleRespond(invitation.projectId, false)}
+                        onClick={() => handleRespond(invitation.id, invitation.projectId, false)}
                         _hover={{ borderColor: 'red.400', color: 'red.500' }}
                       >
                         <Icon as={FiX} />
@@ -242,7 +236,7 @@ export default function InvitationsPage() {
                         color="white"
                         _hover={{ bg: 'blue.800' }}
                         loading={isProcessing}
-                        onClick={() => handleRespond(invitation.projectId, true)}
+                        onClick={() => handleRespond(invitation.id, invitation.projectId, true)}
                       >
                         <Icon as={FiCheck} />
                         Accept

@@ -19,10 +19,73 @@ import {
   FiArrowRight,
 } from 'react-icons/fi'
 import { useState, useEffect } from 'react'
-import { getProjects, getMyInvitations, type Project, type Invitation } from '../services/api'
+import { useNavigate } from 'react-router-dom'
+import { getProjects, getMyInvitations, getProjectDetail, type Project, type Invitation } from '../services/api'
 import Layout from '../components/Layout'
 
+// Component hiển thị avatar thành viên (1-2 người + số còn lại)
+function MemberAvatarStack({ projectId }: { projectId: number }) {
+  const [members, setMembers] = useState<{ userId: number; username: string; isVerified?: boolean }[]>([])
+
+  useEffect(() => {
+    // Gọi API lấy chi tiết project để có members
+    const loadMembers = async () => {
+      try {
+        const response = await getProjectDetail(projectId)
+        setMembers(response.data.members?.slice(0, 2) || [])
+      } catch (error) {
+        setMembers([])
+      }
+    }
+    loadMembers()
+  }, [projectId])
+
+  const totalCount = members.length
+
+  if (members.length === 0) {
+    return (
+      <Box w="32px" h="32px" bg="gray.100" borderRadius="full" display="flex" alignItems="center" justifyContent="center">
+        <Text fontSize="xs" color="gray.400">-</Text>
+      </Box>
+    )
+  }
+
+  return (
+    <HStack gap={-2}>
+      {members.map((member, idx) => (
+        <Box key={member.userId} position="relative" zIndex={members.length - idx}>
+          <Avatar.Root size="sm" border="2px solid white">
+            <Avatar.Fallback
+              name={member.username}
+              bg={member.isVerified ? 'green.100' : 'blue.100'}
+              color={member.isVerified ? 'green.700' : 'blue.700'}
+            />
+          </Avatar.Root>
+        </Box>
+      ))}
+      {totalCount > 2 && (
+        <Box
+          w="32px"
+          h="32px"
+          bg="gray.200"
+          borderRadius="full"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          border="2px solid white"
+          zIndex={0}
+        >
+          <Text fontSize="xs" fontWeight="semibold" color="gray.600">
+            +{totalCount - 2}
+          </Text>
+        </Box>
+      )}
+    </HStack>
+  )
+}
+
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
   const [, setIsLoading] = useState(true)
@@ -40,8 +103,8 @@ export default function DashboardPage() {
     try {
       const projectsRes = await getProjects()
       const invitationsRes = await getMyInvitations()
-      setProjects(projectsRes.data)
-      setInvitations(invitationsRes.data.filter(i => i.status === 'PENDING'))
+      setProjects(projectsRes.data.projects || [])
+      setInvitations(invitationsRes.filter(i => i.status === 'PENDING'))
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
     } finally {
@@ -123,13 +186,23 @@ export default function DashboardPage() {
                     <Heading size="md" mb={1}>Active Milestones</Heading>
                     <Text color="gray.500" fontSize="sm">Reviewing 6 prioritized project streams</Text>
                   </Box>
-                  <Button variant="ghost" colorPalette="brand" size="sm">
-                    Go to Kanban <Icon as={FiArrowRight} ml={2} />
+                  <Button variant="ghost" colorPalette="brand" size="sm" onClick={() => navigate('/projects')}>
+                    View All Projects <Icon as={FiArrowRight} ml={2} />
                   </Button>
                 </HStack>
                 <VStack align="stretch" gap={4}>
                   {projects.slice(0, 3).map((project) => (
-                    <HStack key={project.id} p={4} bg="gray.50" borderRadius="xl" justify="space-between">
+                    <HStack
+                      key={project.id}
+                      p={4}
+                      bg="gray.50"
+                      borderRadius="xl"
+                      justify="space-between"
+                      cursor="pointer"
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                      _hover={{ bg: 'gray.100' }}
+                      transition="background 0.2s"
+                    >
                       <HStack gap={4}>
                         <Box w="40px" h="40px" bg="brand.100" borderRadius="lg" display="flex" alignItems="center" justifyContent="center">
                           <Icon as={FiCheckCircle} color="brand.600" />
@@ -139,14 +212,7 @@ export default function DashboardPage() {
                           <Badge size="sm" variant="subtle" colorPalette="blue">In Progress</Badge>
                         </Box>
                       </HStack>
-                      <HStack gap={-2}>
-                        <Avatar.Root size="sm" border="2px solid white">
-                          <Avatar.Fallback name="User 1" />
-                        </Avatar.Root>
-                        <Avatar.Root size="sm" border="2px solid white">
-                          <Avatar.Fallback name="User 2" />
-                        </Avatar.Root>
-                      </HStack>
+                      <MemberAvatarStack projectId={project.id} />
                     </HStack>
                   ))}
                 </VStack>

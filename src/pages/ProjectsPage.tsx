@@ -12,13 +12,79 @@ import {
   Field,
   Dialog,
   Portal,
+  Avatar,
 } from '@chakra-ui/react'
-import { FiPlus, FiSearch, FiMoreHorizontal, FiCalendar, FiUsers } from 'react-icons/fi'
+import { FiPlus, FiSearch, FiMoreHorizontal, FiCalendar } from 'react-icons/fi'
 import { useState, useEffect } from 'react'
-import { getProjects, createProject, deleteProject, type Project } from '../services/api'
+import { useNavigate } from 'react-router-dom'
+import { getProjects, createProject, deleteProject, getProjectDetail, type Project } from '../services/api'
 import Layout from '../components/Layout'
 
+// Component hiển thị avatar thành viên (1-2 người + số còn lại)
+function MemberAvatarStack({ projectId }: { projectId: number }) {
+  const [members, setMembers] = useState<{ userId: number; username: string; isVerified?: boolean }[]>([])
+
+  useEffect(() => {
+    // Gọi API lấy chi tiết project để có members
+    const loadMembers = async () => {
+      try {
+        const response = await getProjectDetail(projectId)
+        setMembers(response.data.members?.slice(0, 2) || [])
+      } catch (error) {
+        // Nếu lỗi thì để trống
+        setMembers([])
+      }
+    }
+    loadMembers()
+  }, [projectId])
+
+  const totalCount = members.length
+
+  if (members.length === 0) {
+    return (
+      <Box w="32px" h="32px" bg="gray.100" borderRadius="full" display="flex" alignItems="center" justifyContent="center">
+        <Text fontSize="xs" color="gray.400">-</Text>
+      </Box>
+    )
+  }
+
+  return (
+    <HStack gap={-2}>
+      {members.map((member, idx) => (
+        <Box key={member.userId} position="relative" zIndex={members.length - idx}>
+          <Avatar.Root size="sm" border="2px solid white">
+            <Avatar.Fallback
+              name={member.username}
+              bg={member.isVerified ? 'green.100' : 'blue.100'}
+              color={member.isVerified ? 'green.700' : 'blue.700'}
+              fontSize="xs"
+            />
+          </Avatar.Root>
+        </Box>
+      ))}
+      {totalCount > 2 && (
+        <Box
+          w="32px"
+          h="32px"
+          bg="gray.200"
+          borderRadius="full"
+          display="flex"
+          alignItems="center"
+          justifyContent="center"
+          border="2px solid white"
+          zIndex={0}
+        >
+          <Text fontSize="xs" fontWeight="semibold" color="gray.600">
+            +{totalCount - 2}
+          </Text>
+        </Box>
+      )}
+    </HStack>
+  )
+}
+
 export default function ProjectsPage() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isCreating, setIsCreating] = useState(false)
@@ -39,7 +105,7 @@ export default function ProjectsPage() {
   const loadProjects = async () => {
     try {
       const response = await getProjects()
-      setProjects(response.data)
+      setProjects(response.data.projects || [])
     } catch (error) {
       console.error('Failed to load projects:', error)
     } finally {
@@ -114,7 +180,16 @@ export default function ProjectsPage() {
             gap={6}
           >
             {filteredProjects.map((project) => (
-              <Card.Root key={project.id} bg="white" borderRadius="2xl" overflow="hidden">
+              <Card.Root
+                key={project.id}
+                bg="white"
+                borderRadius="2xl"
+                overflow="hidden"
+                cursor="pointer"
+                onClick={() => navigate(`/projects/${project.id}`)}
+                _hover={{ transform: 'translateY(-2px)', boxShadow: 'lg' }}
+                transition="all 0.2s"
+              >
                 <Box h="120px" bg="brand.500" position="relative">
                   <Icon
                     as={FiMoreHorizontal}
@@ -124,7 +199,12 @@ export default function ProjectsPage() {
                     color="white"
                     cursor="pointer"
                     boxSize={5}
-                    onClick={() => handleDeleteProject(project.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleDeleteProject(project.id)
+                    }}
+                    _hover={{ bg: 'whiteAlpha.300', borderRadius: 'full' }}
+                    p={1}
                   />
                   <Box position="absolute" bottom={4} left={4}>
                     <Badge bg="whiteAlpha.300" color="white">Active</Badge>
@@ -141,12 +221,8 @@ export default function ProjectsPage() {
                         <Icon as={FiCalendar} boxSize={4} />
                         <Text>{new Date(project.createdAt).toLocaleDateString()}</Text>
                       </HStack>
-                      <HStack gap={1}>
-                        <Icon as={FiUsers} boxSize={4} />
-                        <Text>5 members</Text>
                       </HStack>
-                    </HStack>
-                    <Box w="32px" h="32px" bg="gray.100" borderRadius="full" />
+                    <MemberAvatarStack projectId={project.id} />
                   </HStack>
                 </Box>
               </Card.Root>

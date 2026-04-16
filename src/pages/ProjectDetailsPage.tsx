@@ -6,7 +6,6 @@ import {
   HStack,
   Card,
   Button,
-  Badge,
   Icon,
   Avatar,
   Input,
@@ -14,39 +13,45 @@ import {
   Grid,
   GridItem,
 } from '@chakra-ui/react'
-import { FiPlus, FiSearch, FiMoreHorizontal, FiCalendar, FiUser, FiFolder, FiCheckCircle, FiClock } from 'react-icons/fi'
-import { useState, useEffect } from 'react'
+import { FiPlus, FiSearch, FiFolder, FiCheckCircle, FiClock } from 'react-icons/fi'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { getProjects, getTasks, createTask, type Project, type Task } from '../services/api'
+import { getProjects, getTasks, getProjectDetail, createTask, moveTask, type Project, type Task, type ProjectMember } from '../services/api'
 import Layout from '../components/Layout'
+import KanbanBoard from '../components/KanbanBoard'
 
 export default function ProjectDetailsPage() {
   const { projectId } = useParams<{ projectId: string }>()
   const [project, setProject] = useState<Project | null>(null)
+  const [members, setMembers] = useState<ProjectMember[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDesc, setNewTaskDesc] = useState('')
+  const dataLoadedRef = useRef(false)
 
   useEffect(() => {
-    if (projectId) {
+    if (projectId && !dataLoadedRef.current) {
+      dataLoadedRef.current = true
       loadProjectData(parseInt(projectId))
     }
   }, [projectId])
 
   const loadProjectData = async (id: number) => {
     try {
-      const [projectsRes, tasksRes] = await Promise.all([
+      const [projectsRes, tasksRes, projectDetailRes] = await Promise.all([
         getProjects(),
         getTasks(id),
+        getProjectDetail(id),
       ])
-      const foundProject = projectsRes.data.find(p => p.id === id)
+      const foundProject = projectsRes.data.projects.find((p: Project) => p.id === id)
       if (foundProject) {
         setProject(foundProject)
       }
       setTasks(tasksRes.data)
+      setMembers(projectDetailRes.data.members || [])
     } catch (error) {
       console.error('Failed to load project data:', error)
     } finally {
@@ -77,59 +82,35 @@ export default function ProjectDetailsPage() {
     t.title.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
-  const todoTasks = filteredTasks.filter(t => t.status === 'TODO')
-  const inProgressTasks = filteredTasks.filter(t => t.status === 'IN_PROGRESS')
-  const doneTasks = filteredTasks.filter(t => t.status === 'DONE')
+  const handleMoveTask = async (taskId: number, fromStatus: string, toStatus: string, toPosition: number) => {
+    if (!projectId) return
+    try {
+      const response = await moveTask(parseInt(projectId), taskId, { toStatus: toStatus as Task['status'], toPosition })
+      const affectedTasks = response.data
+
+      // Smart response handling
+      if (fromStatus === toStatus) {
+        // Same column: merge affected tasks into current state
+        setTasks(currentTasks => currentTasks.map(task => {
+          const updated = affectedTasks.find((t: Task) => t.id === task.id)
+          if (updated) {
+            return { ...task, position: updated.position }
+          }
+          return task
+        }))
+      } else {
+        // Different column: replace all tasks (API returns all project tasks)
+        setTasks(affectedTasks)
+      }
+    } catch (error) {
+      console.error('Failed to move task:', error)
+    }
+  }
 
   const completedCount = tasks.filter(t => t.status === 'DONE').length
   const totalCount = tasks.length
   const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0
 
-  const TaskColumn = ({ title, status, tasks: columnTasks, color }: { title: string; status: string; tasks: Task[]; color: string }) => (
-    <VStack align="stretch" gap={3} flex={1} minW="280px">
-      <HStack justify="space-between">
-        <HStack gap={2}>
-          <Box w="3px" h="20px" bg={`${color}.500`} borderRadius="full" />
-          <Text fontWeight="semibold">{title}</Text>
-          <Badge size="sm" variant="subtle">{columnTasks.length}</Badge>
-        </HStack>
-      </HStack>
-      <VStack align="stretch" gap={3}>
-        {columnTasks.map((task) => (
-          <Card.Root key={task.id} bg="white" borderRadius="xl" p={4}>
-            <HStack justify="space-between" mb={2}>
-              <Badge size="sm" variant="subtle" colorPalette={color === 'orange' ? 'orange' : color === 'blue' ? 'blue' : 'green'}>
-                {task.status.replace('_', ' ')}
-              </Badge>
-              <Icon as={FiMoreHorizontal} color="gray.400" cursor="pointer" />
-            </HStack>
-            <Text fontWeight="medium" mb={2}>{task.title}</Text>
-            <Text fontSize="sm" color="gray.500" mb={3} lineClamp={2}>
-              {task.description}
-            </Text>
-            <HStack justify="space-between" fontSize="xs" color="gray.400">
-              <HStack gap={1}>
-                <Icon as={FiCalendar} boxSize={3} />
-                <Text>Oct 18</Text>
-              </HStack>
-              {task.assigneeId ? (
-                <Avatar.Root size="xs">
-                  <Avatar.Fallback name="User" />
-                </Avatar.Root>
-              ) : (
-                <Icon as={FiUser} boxSize={3} />
-              )}
-            </HStack>
-          </Card.Root>
-        ))}
-        {columnTasks.length === 0 && (
-          <Box p={4} bg="gray.50" borderRadius="xl" border="2px dashed" borderColor="gray.200">
-            <Text fontSize="sm" color="gray.400" textAlign="center">No tasks</Text>
-          </Box>
-        )}
-      </VStack>
-    </VStack>
-  )
 
   return (
     <Layout>
@@ -147,18 +128,28 @@ export default function ProjectDetailsPage() {
               <Text color="gray.500" maxW="600px">{project?.description}</Text>
             </Box>
             <HStack gap={-2}>
-              <Avatar.Root size="sm" border="2px solid white">
-                <Avatar.Fallback name="User 1" />
-              </Avatar.Root>
-              <Avatar.Root size="sm" border="2px solid white">
-                <Avatar.Fallback name="User 2" />
-              </Avatar.Root>
-              <Avatar.Root size="sm" border="2px solid white">
-                <Avatar.Fallback name="User 3" />
-              </Avatar.Root>
-              <Box w="32px" h="32px" bg="gray.200" borderRadius="full" display="flex" alignItems="center" justifyContent="center" border="2px solid white">
-                <Text fontSize="xs" fontWeight="semibold">+4</Text>
-              </Box>
+              {members.length > 0 ? (
+                <>
+                  {members.map((member, idx) => (
+                    <Box key={member.userId} position="relative" zIndex={members.length - idx}>
+                      <Avatar.Root size="sm" border="2px solid white">
+                        <Avatar.Fallback
+                          name={member.username}
+                          bg={member.isVerified ? 'green.100' : 'blue.100'}
+                          color={member.isVerified ? 'green.700' : 'blue.700'}
+                        />
+                      </Avatar.Root>
+                    </Box>
+                  ))}
+                  <Box w="32px" h="32px" bg="gray.200" borderRadius="full" display="flex" alignItems="center" justifyContent="center" border="2px solid white">
+                    <Text fontSize="xs" fontWeight="semibold">+{members.length}</Text>
+                  </Box>
+                </>
+              ) : (
+                <Box w="32px" h="32px" bg="gray.100" borderRadius="full" display="flex" alignItems="center" justifyContent="center">
+                  <Text fontSize="xs" color="gray.400">-</Text>
+                </Box>
+              )}
             </HStack>
           </HStack>
         </Box>
@@ -221,11 +212,16 @@ export default function ProjectDetailsPage() {
             </HStack>
           </HStack>
 
-          <HStack align="start" gap={6} overflowX="auto" pb={2}>
-            <TaskColumn title="To Do" status="TODO" tasks={todoTasks} color="orange" />
-            <TaskColumn title="In Progress" status="IN_PROGRESS" tasks={inProgressTasks} color="blue" />
-            <TaskColumn title="Done" status="DONE" tasks={doneTasks} color="green" />
-          </HStack>
+          {isLoading ? (
+            <Text color="gray.400" textAlign="center" py={8}>Loading tasks...</Text>
+          ) : (
+            <KanbanBoard
+              tasks={filteredTasks}
+              projectId={parseInt(projectId || '0')}
+              members={members}
+              onMoveTask={handleMoveTask}
+            />
+          )}
         </Card.Root>
 
         {/* Project Guidelines & Team Activity */}
