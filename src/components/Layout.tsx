@@ -20,8 +20,12 @@ import {
   FiHelpCircle,
   FiLogOut,
 } from 'react-icons/fi'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { getMyInvitations, type User } from '../services/api'
+
+// Cache for invitations to reduce API calls
+let cachedInvitations: { data: any[]; timestamp: number } | null = null
+const CACHE_DURATION = 30000 // 30 seconds
 
 interface LayoutProps {
   children: React.ReactNode
@@ -56,29 +60,64 @@ export default function Layout({ children }: LayoutProps) {
     return null
   })
 
-  // Load invitation count for badge (chỉ khi vào trang, không polling)
-  useEffect(() => {
-    const loadInvitationCount = async () => {
-      try {
-        const invitations = await getMyInvitations()
-        const pendingCount = Array.isArray(invitations)
-          ? invitations.filter((i) => i.status === 'PENDING').length
-          : 0
-        setInvitationCount(pendingCount)
-      } catch (error: any) {
-        // Ignore 429 errors
-        if (error?.status === 429) {
-          console.log('Rate limited, skipping invitation refresh')
-        } else {
-          console.error('Failed to load invitation count:', error)
-        }
-      }
+  // Track last request time to prevent spam
+  const lastRequestRef = useRef<number>(0)
+  const isRequestingRef = useRef<boolean>(false)
+
+  // Load invitation count for badge with debouncing and caching
+  const loadInvitationCount = useCallback(async () => {
+    const now = Date.now()
+    const token = localStorage.getItem('token')
+    
+    if (!token || isRequestingRef.current) return
+    
+    // Check cache first
+    if (cachedInvitations && (now - cachedInvitations.timestamp) < CACHE_DURATION) {
+      const pendingCount = cachedInvitations.data.filter((i) => i.status === 'PENDING').length
+      setInvitationCount(pendingCount)
+      return
     }
 
-    if (localStorage.getItem('token')) {
-      loadInvitationCount()
+    // Rate limiting: minimum 10 seconds between requests
+    if (now - lastRequestRef.current < 10000) {
+      console.log('[Layout] Skipping invitation load - too soon')
+      return
     }
-  }, [location.pathname])
+
+    isRequestingRef.current = true
+    lastRequestRef.current = now
+
+    try {
+      const invitations = await getMyInvitations()
+      
+      // Update cache
+      cachedInvitations = {
+        data: Array.isArray(invitations) ? invitations : [],
+        timestamp: now
+      }
+      
+      const pendingCount = cachedInvitations.data.filter((i) => i.status === 'PENDING').length
+      setInvitationCount(pendingCount)
+    } catch (error: any) {
+      // Handle 429 rate limit
+      if (error?.status === 429 || error?.message?.includes('429')) {
+        console.log('[Layout] Rate limited (429), using cached data if available')
+        if (cachedInvitations) {
+          const pendingCount = cachedInvitations.data.filter((i) => i.status === 'PENDING').length
+          setInvitationCount(pendingCount)
+        }
+      } else {
+        console.error('Failed to load invitation count:', error)
+      }
+    } finally {
+      isRequestingRef.current = false
+    }
+  }, [])
+
+  // Load on mount and when location changes, but with debounce
+  useEffect(() => {
+    loadInvitationCount()
+  }, [location.pathname, loadInvitationCount])
 
   const handleLogout = () => {
     localStorage.removeItem('token')

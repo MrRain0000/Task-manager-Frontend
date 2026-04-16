@@ -4,6 +4,14 @@ function getToken(): string | null {
   return localStorage.getItem('token')
 }
 
+// Request deduplication cache
+const pendingRequests = new Map<string, Promise<any>>()
+const RATE_LIMIT_RETRY_DELAY = 2000 // 2 seconds
+
+function getRequestKey(endpoint: string, options: RequestInit): string {
+  return `${options.method || 'GET'}:${endpoint}:${JSON.stringify(options.body || '')}`
+}
+
 interface LoginRequest {
   email: string
   password: string
@@ -132,9 +140,10 @@ export interface ActivityLog {
   createdAt: string
 }
 
-async function fetchApi<T>(
+async function fetchApiWithRetry<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  retryCount = 0
 ): Promise<ApiResponse<T>> {
   const url = `${API_BASE_URL}${endpoint}`
   const token = getToken()
@@ -151,6 +160,13 @@ async function fetchApi<T>(
   const response = await fetch(url, config)
   const data = await response.json()
 
+  // Handle 429 rate limit with retry
+  if (response.status === 429 && retryCount < 2) {
+    console.log(`[API] Rate limited (429), retrying after ${RATE_LIMIT_RETRY_DELAY}ms...`)
+    await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_RETRY_DELAY))
+    return fetchApiWithRetry<T>(endpoint, options, retryCount + 1)
+  }
+
   if (!response.ok) {
     const error = new Error(data.message || `HTTP error! status: ${response.status}`)
     ;(error as any).status = response.status
@@ -158,6 +174,30 @@ async function fetchApi<T>(
   }
 
   return data
+}
+
+async function fetchApi<T>(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<ApiResponse<T>> {
+  const requestKey = getRequestKey(endpoint, options)
+
+  // Check for pending request (deduplication)
+  if (pendingRequests.has(requestKey)) {
+    console.log('[API] Deduplicating request:', requestKey)
+    return pendingRequests.get(requestKey) as Promise<ApiResponse<T>>
+  }
+
+  // Create new request
+  const requestPromise = fetchApiWithRetry<T>(endpoint, options).finally(() => {
+    // Remove from pending after completion
+    pendingRequests.delete(requestKey)
+  })
+
+  // Store in pending requests
+  pendingRequests.set(requestKey, requestPromise)
+
+  return requestPromise
 }
 
 // Auth APIs
@@ -280,25 +320,12 @@ export async function inviteMember(projectId: number, inviteeEmail: string): Pro
 }
 
 export async function getMyInvitations(): Promise<Invitation[]> {
-  const url = `${API_BASE_URL}/api/users/me/invitations`
-  const token = getToken()
-
-  const config: RequestInit = {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-    },
-  }
-
-  const response = await fetch(url, config)
-  const data = await response.json()
-
-  if (!response.ok) {
-    throw new Error(data.message || `HTTP error! status: ${response.status}`)
-  }
-
-  // API trả về array trực tiếp, không bọc trong ApiResponse
-  return data
+  // Use fetchApi with retry logic, then extract the array data
+  const response = await fetchApi<Invitation[]>('/api/users/me/invitations', {
+    method: 'GET',
+  })
+  // API trả về array trực tiếp trong data
+  return response.data || []
 }
 
 export async function respondToInvitation(projectId: number, request: RespondInvitationRequest): Promise<ApiResponse<null>> {
