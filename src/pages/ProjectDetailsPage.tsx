@@ -88,22 +88,31 @@ export default function ProjectDetailsPage() {
     if (!projectId) return
     try {
       const response = await moveTask(parseInt(projectId), taskId, { toStatus: toStatus as Task['status'], toPosition })
-      const affectedTasks = response.data
+      // API returns map: { "TODO": [...], "IN_PROGRESS": [...], ... }
+      const affectedColumns = response.data as unknown as Record<string, Task[]>
 
-      // Smart response handling
-      if (fromStatus === toStatus) {
-        // Same column: merge affected tasks into current state
-        setTasks(currentTasks => currentTasks.map(task => {
-          const updated = affectedTasks.find((t: Task) => t.id === task.id)
-          if (updated) {
-            return { ...task, position: updated.position }
+      // Flatten all tasks from all affected columns
+      const allAffectedTasks: Task[] = []
+      Object.values(affectedColumns).forEach((columnTasks) => {
+        if (Array.isArray(columnTasks)) {
+          allAffectedTasks.push(...columnTasks)
+        }
+      })
+
+      // Merge affected tasks into current state
+      setTasks(currentTasks => {
+        // Create a map of updated tasks by ID
+        const updatedTaskMap = new Map<number, Task>()
+        allAffectedTasks.forEach(t => updatedTaskMap.set(t.id, t))
+
+        // Update existing tasks or keep them if not affected
+        return currentTasks.map(task => {
+          if (updatedTaskMap.has(task.id)) {
+            return updatedTaskMap.get(task.id)!
           }
           return task
-        }))
-      } else {
-        // Different column: replace all tasks (API returns all project tasks)
-        setTasks(affectedTasks)
-      }
+        })
+      })
     } catch (error) {
       console.error('Failed to move task:', error)
     }
