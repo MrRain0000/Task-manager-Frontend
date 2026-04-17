@@ -17,8 +17,6 @@ import {
   FiMoreHorizontal,
   FiCheckCircle,
   FiCircle,
-  FiPaperclip,
-  FiArchive,
   FiCheckSquare,
   FiEdit2,
   FiTrash2,
@@ -37,10 +35,16 @@ import {
   uploadAttachment,
   deleteAttachment,
   downloadAttachment,
+  getSubTasks,
+  createSubTask,
+  updateSubTask,
+  deleteSubTask,
+  reorderSubTasks,
   type Task,
   type ActivityLog,
   type ProjectMember,
   type Attachment,
+  type SubTask,
 } from '../services/api'
 
 interface TaskDetailsModalProps {
@@ -53,11 +57,6 @@ interface TaskDetailsModalProps {
   onTaskDeleted?: (taskId: number) => void
 }
 
-interface SubTask {
-  id: string
-  title: string
-  completed: boolean
-}
 
 export default function TaskDetailsModal({
   projectId,
@@ -76,13 +75,13 @@ export default function TaskDetailsModal({
   const [editedTitle, setEditedTitle] = useState('')
   const [editedDescription, setEditedDescription] = useState('')
 
-  // Mock subtasks - in a real app, these would come from the API
-  const [subTasks, setSubTasks] = useState<SubTask[]>([
-    { id: '1', title: 'Audit accessibility for color palette', completed: true },
-    { id: '2', title: 'Standardize spacing tokens (4, 12, 16)', completed: true },
-    { id: '3', title: 'Refine SideNavBar glassmorphism effect', completed: false },
-    { id: '4', title: 'Export SVG icons for dashboard', completed: false },
-  ])
+  // Subtasks state
+  const [subTasks, setSubTasks] = useState<SubTask[]>([])
+  const [isLoadingSubTasks, setIsLoadingSubTasks] = useState(false)
+  const [isAddingSubTask, setIsAddingSubTask] = useState(false)
+  const [newSubTaskTitle, setNewSubTaskTitle] = useState('')
+  const [editingSubTaskId, setEditingSubTaskId] = useState<number | null>(null)
+  const [editingSubTaskTitle, setEditingSubTaskTitle] = useState('')
 
   // Attachments state
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -116,6 +115,17 @@ export default function TaskDetailsModal({
 
       // Load attachments
       setAttachments(attachmentsRes.data || [])
+
+      // Load subtasks
+      setIsLoadingSubTasks(true)
+      try {
+        const subTasksRes = await getSubTasks(taskId)
+        setSubTasks(subTasksRes.data || [])
+      } catch (error) {
+        console.error('Failed to load subtasks:', error)
+      } finally {
+        setIsLoadingSubTasks(false)
+      }
     } catch (error) {
       console.error('Failed to load task details:', error)
     } finally {
@@ -244,13 +254,68 @@ export default function TaskDetailsModal({
     return { bg: 'gray.50', color: 'gray.500' }
   }
 
-  const toggleSubTask = (subTaskId: string) => {
-    setSubTasks((prev) =>
-      prev.map((st) => (st.id === subTaskId ? { ...st, completed: !st.completed } : st))
-    )
+  // Toggle subtask status (TODO <-> DONE)
+  const toggleSubTask = async (subTaskId: number) => {
+    const subTask = subTasks.find(st => st.id === subTaskId)
+    if (!subTask) return
+
+    const newStatus = subTask.status === 'DONE' ? 'TODO' : 'DONE'
+    try {
+      const res = await updateSubTask(subTaskId, { status: newStatus })
+      setSubTasks(prev => prev.map(st => st.id === subTaskId ? res.data : st))
+    } catch (error) {
+      console.error('Failed to update subtask:', error)
+      alert('Cập nhật sub-task thất bại')
+    }
   }
 
-  const completedSubTasks = subTasks.filter((st) => st.completed).length
+  // Handle create subtask
+  const handleCreateSubTask = async () => {
+    if (!newSubTaskTitle.trim()) return
+    try {
+      const res = await createSubTask(taskId, { title: newSubTaskTitle.trim() })
+      setSubTasks(prev => [...prev, res.data])
+      setNewSubTaskTitle('')
+      setIsAddingSubTask(false)
+    } catch (error) {
+      console.error('Failed to create subtask:', error)
+      alert('Tạo sub-task thất bại')
+    }
+  }
+
+  // Handle update subtask
+  const handleUpdateSubTask = async (subtaskId: number) => {
+    if (!editingSubTaskTitle.trim()) return
+    try {
+      const res = await updateSubTask(subtaskId, { title: editingSubTaskTitle.trim() })
+      setSubTasks(prev => prev.map(st => st.id === subtaskId ? res.data : st))
+      setEditingSubTaskId(null)
+      setEditingSubTaskTitle('')
+    } catch (error) {
+      console.error('Failed to update subtask:', error)
+      alert('Cập nhật sub-task thất bại')
+    }
+  }
+
+  // Handle delete subtask
+  const handleDeleteSubTask = async (subtaskId: number) => {
+    if (!window.confirm('Bạn có chắc muốn xóa sub-task này?')) return
+    try {
+      await deleteSubTask(subtaskId)
+      setSubTasks(prev => prev.filter(st => st.id !== subtaskId))
+    } catch (error) {
+      console.error('Failed to delete subtask:', error)
+      alert('Xóa sub-task thất bại')
+    }
+  }
+
+  // Start editing subtask
+  const startEditingSubTask = (subTask: SubTask) => {
+    setEditingSubTaskId(subTask.id)
+    setEditingSubTaskTitle(subTask.title)
+  }
+
+  const completedSubTasks = subTasks.filter(st => st.status === 'DONE').length
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -415,69 +480,171 @@ export default function TaskDetailsModal({
                     <Icon as={FiCheckSquare} color="gray.400" />
                     <Text fontWeight="semibold">Sub-tasks</Text>
                   </HStack>
-                  <Text fontSize="sm" color="gray.500">
-                    {completedSubTasks}/{subTasks.length} Complete
-                  </Text>
+                  <HStack gap={3}>
+                    <Text fontSize="sm" color="gray.500">
+                      {completedSubTasks}/{subTasks.length} Complete
+                    </Text>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => setIsAddingSubTask(true)}
+                      disabled={isAddingSubTask}
+                    >
+                      + Thêm
+                    </Button>
+                  </HStack>
                 </HStack>
 
-                <VStack align="stretch" gap={2} pl={6}>
-                  {subTasks.map((subTask) => (
-                    <HStack
-                      key={subTask.id}
-                      gap={3}
-                      p={2}
-                      borderRadius="md"
-                      cursor="pointer"
-                      onClick={() => toggleSubTask(subTask.id)}
-                      _hover={{ bg: 'gray.50' }}
-                      justify="space-between"
+                {/* Add subtask form */}
+                {isAddingSubTask && (
+                  <HStack gap={2} pl={6}>
+                    <input
+                      value={newSubTaskTitle}
+                      onChange={(e) => setNewSubTaskTitle(e.target.value)}
+                      placeholder="Nhập tên sub-task..."
+                      style={{
+                        flex: 1,
+                        padding: '0.5rem',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '0.375rem',
+                        fontSize: '0.875rem',
+                      }}
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleCreateSubTask()
+                        if (e.key === 'Escape') {
+                          setIsAddingSubTask(false)
+                          setNewSubTaskTitle('')
+                        }
+                      }}
+                    />
+                    <Button size="xs" colorPalette="brand" onClick={handleCreateSubTask}>
+                      Lưu
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => {
+                        setIsAddingSubTask(false)
+                        setNewSubTaskTitle('')
+                      }}
                     >
-                      <HStack gap={3} flex={1}>
-                        <Icon
-                          as={subTask.completed ? FiCheckCircle : FiCircle}
-                          color={subTask.completed ? 'brand.500' : 'gray.400'}
-                          boxSize={5}
-                        />
-                        <Text
-                          fontSize="sm"
-                          textDecoration={subTask.completed ? 'line-through' : 'none'}
-                          color={subTask.completed ? 'gray.400' : 'gray.700'}
-                        >
-                          {subTask.title}
-                        </Text>
-                      </HStack>
-                      <Menu.Root onSelect={(details) => {
-                        if (details.value === 'edit') setIsEditing(true)
-                        if (details.value === 'delete') handleDeleteTask()
-                      }}>
-                        <Menu.Trigger asChild>
-                          <Box
-                            p={1}
+                      Hủy
+                    </Button>
+                  </HStack>
+                )}
+
+                {/* Loading state */}
+                {isLoadingSubTasks ? (
+                  <Box pl={6} py={2}>
+                    <Text fontSize="sm" color="gray.400">Đang tải...</Text>
+                  </Box>
+                ) : (
+                  <VStack align="stretch" gap={2} pl={6}>
+                    {subTasks.length === 0 ? (
+                      <Text fontSize="sm" color="gray.400" fontStyle="italic">
+                        Chưa có sub-task nào. Nhấn "+ Thêm" để tạo mới.
+                      </Text>
+                    ) : (
+                      subTasks.map((subTask) => {
+                        const isDone = subTask.status === 'DONE'
+                        const isEditing = editingSubTaskId === subTask.id
+
+                        return (
+                          <HStack
+                            key={subTask.id}
+                            gap={3}
+                            p={2}
                             borderRadius="md"
-                            _hover={{ bg: 'gray.200' }}
-                            onClick={(e) => e.stopPropagation()}
+                            cursor="pointer"
+                            onClick={() => !isEditing && toggleSubTask(subTask.id)}
+                            _hover={{ bg: 'gray.50' }}
+                            justify="space-between"
                           >
-                            <Icon as={FiMoreHorizontal} boxSize={4} color="gray.400" />
-                          </Box>
-                        </Menu.Trigger>
-                        <Menu.Content>
-                          <Menu.Item value="edit">
-                            <HStack gap={2}>
-                              <Icon as={FiEdit2} boxSize={4} />
-                              <Text>Chỉnh sửa</Text>
-                            </HStack>
-                          </Menu.Item>
-                          <Menu.Item value="delete" color="red.500">
-                            <HStack gap={2}>
-                              <Icon as={FiTrash2} boxSize={4} />
-                              <Text>Xóa</Text>
-                            </HStack>
-                          </Menu.Item>
-                        </Menu.Content>
-                      </Menu.Root>
-                    </HStack>
-                  ))}
-                </VStack>
+                            {isEditing ? (
+                              <HStack gap={2} flex={1}>
+                                <input
+                                  value={editingSubTaskTitle}
+                                  onChange={(e) => setEditingSubTaskTitle(e.target.value)}
+                                  style={{
+                                    flex: 1,
+                                    padding: '0.5rem',
+                                    border: '1px solid #E5E7EB',
+                                    borderRadius: '0.375rem',
+                                    fontSize: '0.875rem',
+                                  }}
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleUpdateSubTask(subTask.id)
+                                    if (e.key === 'Escape') {
+                                      setEditingSubTaskId(null)
+                                      setEditingSubTaskTitle('')
+                                    }
+                                  }}
+                                  onClick={(e) => e.stopPropagation()}
+                                />
+                                <Button size="xs" colorPalette="brand" onClick={(e) => { e.stopPropagation(); handleUpdateSubTask(subTask.id) }}>
+                                  Lưu
+                                </Button>
+                                <Button size="xs" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingSubTaskId(null); setEditingSubTaskTitle('') }}>
+                                  Hủy
+                                </Button>
+                              </HStack>
+                            ) : (
+                              <>
+                                <HStack gap={3} flex={1}>
+                                  <Icon
+                                    as={isDone ? FiCheckCircle : FiCircle}
+                                    color={isDone ? 'brand.500' : 'gray.400'}
+                                    boxSize={5}
+                                  />
+                                  <Text
+                                    fontSize="sm"
+                                    textDecoration={isDone ? 'line-through' : 'none'}
+                                    color={isDone ? 'gray.400' : 'gray.700'}
+                                  >
+                                    {subTask.title}
+                                  </Text>
+                                  {subTask.assigneeName && (
+                                    <Badge size="sm" variant="subtle" colorPalette="gray">
+                                      {subTask.assigneeName}
+                                    </Badge>
+                                  )}
+                                </HStack>
+                                <Menu.Root>
+                                  <Menu.Trigger asChild>
+                                    <Box
+                                      p={1}
+                                      borderRadius="md"
+                                      _hover={{ bg: 'gray.200' }}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Icon as={FiMoreHorizontal} boxSize={4} color="gray.400" />
+                                    </Box>
+                                  </Menu.Trigger>
+                                  <Menu.Content>
+                                    <Menu.Item value="edit" onClick={() => startEditingSubTask(subTask)}>
+                                      <HStack gap={2}>
+                                        <Icon as={FiEdit2} boxSize={4} />
+                                        <Text>Chỉnh sửa</Text>
+                                      </HStack>
+                                    </Menu.Item>
+                                    <Menu.Item value="delete" color="red.500" onClick={() => handleDeleteSubTask(subTask.id)}>
+                                      <HStack gap={2}>
+                                        <Icon as={FiTrash2} boxSize={4} />
+                                        <Text>Xóa</Text>
+                                      </HStack>
+                                    </Menu.Item>
+                                  </Menu.Content>
+                                </Menu.Root>
+                              </>
+                            )}
+                          </HStack>
+                        )
+                      })
+                    )}
+                  </VStack>
+                )}
               </VStack>
 
               {/* Activity */}
@@ -727,18 +894,6 @@ export default function TaskDetailsModal({
                 </VStack>
               </VStack>
 
-              {/* Archive Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                w="full"
-                mt="auto"
-                color="gray.500"
-                _hover={{ color: 'red.500', bg: 'red.50' }}
-              >
-                <Icon as={FiArchive} mr={2} />
-                Archive Task
-              </Button>
             </VStack>
           </HStack>
         ) : null}

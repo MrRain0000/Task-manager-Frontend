@@ -495,3 +495,72 @@ export async function downloadAttachment(attachmentId: number): Promise<Blob> {
 
   return response.blob()
 }
+
+// Sub-task interfaces
+export interface SubTask {
+  id: number
+  taskId: number
+  title: string
+  description: string | null
+  assigneeId: number | null
+  assigneeName: string | null
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
+  position: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateSubTaskRequest {
+  title: string
+  description?: string
+  assigneeId?: number
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+}
+
+export interface UpdateSubTaskRequest {
+  title?: string
+  description?: string
+  assigneeId?: number | null
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  status?: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
+}
+
+export interface ReorderSubTasksRequest {
+  subtaskIds: number[]
+}
+
+// Sub-task APIs
+export async function getSubTasks(taskId: number, status?: string): Promise<ApiResponse<SubTask[]>> {
+  const query = status ? `?status=${status}` : ''
+  return fetchApi<SubTask[]>(`/api/tasks/${taskId}/subtasks${query}`, {
+    method: 'GET',
+  })
+}
+
+export async function createSubTask(taskId: number, request: CreateSubTaskRequest): Promise<ApiResponse<SubTask>> {
+  return fetchApi<SubTask>(`/api/tasks/${taskId}/subtasks`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function updateSubTask(subtaskId: number, request: UpdateSubTaskRequest): Promise<ApiResponse<SubTask>> {
+  return fetchApi<SubTask>(`/api/subtasks/${subtaskId}`, {
+    method: 'PUT',
+    body: JSON.stringify(request),
+  })
+}
+
+export async function deleteSubTask(subtaskId: number): Promise<ApiResponse<null>> {
+  return fetchApi<null>(`/api/subtasks/${subtaskId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function reorderSubTasks(taskId: number, request: ReorderSubTasksRequest): Promise<ApiResponse<null>> {
+  return fetchApi<null>(`/api/tasks/${taskId}/subtasks/reorder`, {
+    method: 'PUT',
+    body: JSON.stringify(request),
+  })
+}

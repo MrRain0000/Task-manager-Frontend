@@ -1073,3 +1073,190 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
   - Documents: `application/pdf`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
   - Text: `text/plain`
 
+---
+
+## 12. Sub-tasks (Công việc con)
+
+> Quản lý sub-tasks cho từng task chính. Sub-task có thể được thêm, sửa, xóa riêng biệt sau khi task chính được tạo.
+
+### 12.1 Create Sub-task (Thêm công việc con)
+- **URL**: `POST /api/tasks/{taskId}/subtasks`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project)
+- **Content-Type**: `application/json`
+- **Request Body**:
+```json
+{
+    "title": "Implement login UI",
+    "description": "Tạo form đăng nhập với email và password",
+    "assigneeId": 2,
+    "priority": "HIGH"
+}
+```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| title | String | Yes | Tiêu đề sub-task |
+| description | String | No | Mô tả chi tiết |
+| assigneeId | Long | No | ID người được giao |
+| priority | String | No | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`. Default: `MEDIUM` |
+
+- **Response** (201 Created):
+```json
+{
+    "status": 201,
+    "message": "Tạo sub-task thành công",
+    "data": {
+        "id": 1,
+        "taskId": 5,
+        "title": "Implement login UI",
+        "description": "Tạo form đăng nhập với email và password",
+        "assigneeId": 2,
+        "assigneeName": "Nguyen Van B",
+        "priority": "HIGH",
+        "status": "TODO",
+        "position": 0,
+        "createdAt": "2024-01-15T10:30:00",
+        "updatedAt": "2024-01-15T10:30:00"
+    }
+}
+```
+- **Business Rules**:
+  - User phải là thành viên ACCEPTED của project chứa task chính.
+  - `assigneeId` nếu có, phải là thành viên của project.
+  - `position` tự động tính (append vào cuối danh sách sub-tasks).
+  - Activity log `SUBTASK_CREATED` được tạo.
+- **Error Cases**:
+  - `400`: Title trống hoặc quá dài (>200 ký tự).
+  - `403`: User không có quyền.
+  - `404`: Task chính không tồn tại.
+  - `400`: Assignee không phải thành viên project.
+
+### 12.2 Update Sub-task (Sửa công việc con)
+- **URL**: `PUT /api/subtasks/{subtaskId}`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project)
+- **Content-Type**: `application/json`
+- **Request Body**:
+```json
+{
+    "title": "Implement login UI with validation",
+    "description": "Thêm validate email format",
+    "assigneeId": 3,
+    "priority": "CRITICAL",
+    "status": "IN_PROGRESS"
+}
+```
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Cập nhật sub-task thành công",
+    "data": {
+        "id": 1,
+        "taskId": 5,
+        "title": "Implement login UI with validation",
+        "description": "Thêm validate email format",
+        "assigneeId": 3,
+        "assigneeName": "Tran Van C",
+        "priority": "CRITICAL",
+        "status": "IN_PROGRESS",
+        "position": 0,
+        "createdAt": "2024-01-15T10:30:00",
+        "updatedAt": "2024-01-15T14:20:00"
+    }
+}
+```
+- **Business Rules**:
+  - Chỉ thành viên ACCEPTED mới được cập nhật.
+  - Các field không gửi sẽ giữ nguyên giá trị cũ.
+  - Nếu `status` chuyển sang `DONE`, có thể trigger update progress task chính.
+  - Activity log `SUBTASK_UPDATED` được tạo.
+- **Error Cases**:
+  - `404`: Sub-task không tồn tại.
+  - `403`: User không có quyền.
+  - `400`: Assignee không hợp lệ.
+
+### 12.3 Delete Sub-task (Xóa công việc con)
+- **URL**: `DELETE /api/subtasks/{subtaskId}`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project)
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Xóa sub-task thành công",
+    "data": null
+}
+```
+- **Business Rules**:
+  - Sub-task bị xóa hoàn toàn (hard delete).
+  - Reorder position của các sub-task còn lại.
+  - Activity log `SUBTASK_DELETED` được tạo.
+- **Error Cases**:
+  - `404`: Sub-task không tồn tại.
+  - `403`: User không có quyền.
+
+### 12.4 Get Sub-tasks of Task (Lấy danh sách công việc con)
+- **URL**: `GET /api/tasks/{taskId}/subtasks`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project)
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Lấy danh sách sub-tasks thành công",
+    "data": [
+        {
+            "id": 1,
+            "taskId": 5,
+            "title": "Implement login UI",
+            "description": "...",
+            "assigneeId": 2,
+            "assigneeName": "Nguyen Van B",
+            "priority": "HIGH",
+            "status": "DONE",
+            "position": 0,
+            "createdAt": "2024-01-15T10:30:00",
+            "updatedAt": "2024-01-15T16:00:00"
+        },
+        {
+            "id": 2,
+            "taskId": 5,
+            "title": "Implement register UI",
+            "description": "...",
+            "assigneeId": null,
+            "assigneeName": null,
+            "priority": "MEDIUM",
+            "status": "TODO",
+            "position": 1,
+            "createdAt": "2024-01-15T11:00:00",
+            "updatedAt": "2024-01-15T11:00:00"
+        }
+    ]
+}
+```
+- **Query Parameters**:
+  - `status` (optional): Filter theo status (`TODO`, `IN_PROGRESS`, `DONE`, `CANCELLED`).
+  - `sort` (optional): `position`, `createdAt`, `priority`. Default: `position`.
+- **Business Rules**:
+  - Trả về danh sách sorted theo `position` ASC.
+  - Include thông tin assignee (nếu có).
+
+### 12.5 Reorder Sub-tasks (Sắp xếp lại vị trí)
+- **URL**: `PUT /api/tasks/{taskId}/subtasks/reorder`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project)
+- **Content-Type**: `application/json`
+- **Request Body**:
+```json
+{
+    "subtaskIds": [2, 1, 3]
+}
+```
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Sắp xếp lại sub-tasks thành công",
+    "data": null
+}
+```
+- **Business Rules**:
+  - `subtaskIds` phải chứa đủ và đúng các ID hiện có.
+  - Position sẽ được update theo thứ tự trong array.
+
