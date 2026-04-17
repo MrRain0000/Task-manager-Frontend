@@ -22,8 +22,11 @@ import {
   FiCheckSquare,
   FiEdit2,
   FiTrash2,
+  FiFile,
+  FiImage,
+  FiFileText,
 } from 'react-icons/fi'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getTaskDetail, getActivityLogs, updateTask, assignTask, deleteTask, type Task, type ActivityLog, type ProjectMember } from '../services/api'
 
 interface TaskDetailsModalProps {
@@ -74,11 +77,9 @@ export default function TaskDetailsModal({
     { id: '4', title: 'Export SVG icons for dashboard', completed: false },
   ])
 
-  // Mock attachments
-  const [attachments] = useState<Attachment[]>([
-    { id: '1', name: 'Style_Guide_v2.pdf', size: '2.4 MB', type: 'pdf' },
-    { id: '2', name: 'Header_Layout.png', size: '1.8 MB', type: 'image' },
-  ])
+  // Attachments state
+  const [attachments, setAttachments] = useState<Attachment[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Mock labels
   const [labels] = useState<string[]>(['UI/UX', 'High Priority'])
@@ -160,6 +161,57 @@ export default function TaskDetailsModal({
     } catch (error) {
       console.error('Failed to delete task:', error)
       alert('Xóa task thất bại')
+    }
+  }
+
+  const handleAddAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    Array.from(files).forEach((file) => {
+      const size = file.size < 1024 * 1024
+        ? `${(file.size / 1024).toFixed(1)} KB`
+        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+
+      const type: Attachment['type'] = file.type.startsWith('image/')
+        ? 'image'
+        : file.name.endsWith('.pdf')
+        ? 'pdf'
+        : 'other'
+
+      const newAttachment: Attachment = {
+        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+        name: file.name,
+        size,
+        type,
+      }
+
+      setAttachments(prev => [...prev, newAttachment])
+    })
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id))
+  }
+
+  const getFileIcon = (type: Attachment['type']) => {
+    switch (type) {
+      case 'pdf': return FiFileText
+      case 'image': return FiImage
+      default: return FiFile
+    }
+  }
+
+  const getFileColor = (type: Attachment['type']) => {
+    switch (type) {
+      case 'pdf': return { bg: 'red.50', color: 'red.500' }
+      case 'image': return { bg: 'blue.50', color: 'blue.500' }
+      default: return { bg: 'gray.50', color: 'gray.500' }
     }
   }
 
@@ -570,49 +622,78 @@ export default function TaskDetailsModal({
               <VStack align="stretch" gap={2}>
                 <HStack justify="space-between">
                   <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase">
-                    Attachments
+                    Attachments ({attachments.length})
                   </Text>
-                  <Text fontSize="xs" color="brand.500" cursor="pointer">
-                    Add
+                  <Text
+                    fontSize="xs"
+                    color="brand.500"
+                    cursor="pointer"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    + Add
                   </Text>
                 </HStack>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleAddAttachment}
+                  multiple
+                />
                 <VStack align="stretch" gap={2}>
-                  {attachments.map((attachment) => (
-                    <HStack
-                      key={attachment.id}
-                      gap={3}
-                      p={2}
-                      bg="white"
-                      borderRadius="md"
-                      border="1px solid"
-                      borderColor="gray.100"
-                      cursor="pointer"
-                      _hover={{ borderColor: 'gray.200', bg: 'gray.50' }}
-                    >
-                      <Box
-                        w={10}
-                        h={10}
-                        bg={attachment.type === 'pdf' ? 'red.50' : 'blue.50'}
+                  {attachments.length === 0 && (
+                    <Text fontSize="sm" color="gray.400" textAlign="center" py={2}>
+                      No attachments yet
+                    </Text>
+                  )}
+                  {attachments.map((attachment) => {
+                    const fileColors = getFileColor(attachment.type)
+                    const FileIcon = getFileIcon(attachment.type)
+                    return (
+                      <HStack
+                        key={attachment.id}
+                        gap={3}
+                        p={2}
+                        bg="white"
                         borderRadius="md"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
+                        border="1px solid"
+                        borderColor="gray.100"
+                        cursor="pointer"
+                        _hover={{ borderColor: 'gray.200', bg: 'gray.50' }}
                       >
+                        <Box
+                          w={10}
+                          h={10}
+                          bg={fileColors.bg}
+                          borderRadius="md"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          <Icon as={FileIcon} color={fileColors.color} boxSize={5} />
+                        </Box>
+                        <VStack align="start" gap={0} flex={1}>
+                          <Text fontSize="sm" fontWeight="medium" lineClamp={1}>
+                            {attachment.name}
+                          </Text>
+                          <Text fontSize="xs" color="gray.400">
+                            {attachment.size}
+                          </Text>
+                        </VStack>
                         <Icon
-                          as={attachment.type === 'pdf' ? FiPaperclip : FiPaperclip}
-                          color={attachment.type === 'pdf' ? 'red.500' : 'blue.500'}
+                          as={FiX}
+                          boxSize={4}
+                          color="gray.400"
+                          cursor="pointer"
+                          _hover={{ color: 'red.500' }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemoveAttachment(attachment.id)
+                          }}
                         />
-                      </Box>
-                      <VStack align="start" gap={0} flex={1}>
-                        <Text fontSize="sm" fontWeight="medium" lineClamp={1}>
-                          {attachment.name}
-                        </Text>
-                        <Text fontSize="xs" color="gray.400">
-                          {attachment.size}
-                        </Text>
-                      </VStack>
-                    </HStack>
-                  ))}
+                      </HStack>
+                    )
+                  })}
                 </VStack>
               </VStack>
 
