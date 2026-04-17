@@ -17,6 +17,8 @@ import {
   FiMoreHorizontal,
   FiCheckCircle,
   FiCircle,
+  FiPaperclip,
+  FiArchive,
   FiCheckSquare,
   FiEdit2,
   FiTrash2,
@@ -894,6 +896,18 @@ export default function TaskDetailsModal({
                 </VStack>
               </VStack>
 
+              {/* Archive Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                w="full"
+                mt="auto"
+                color="gray.500"
+                _hover={{ color: 'red.500', bg: 'red.50' }}
+              >
+                <Icon as={FiArchive} mr={2} />
+                Archive Task
+              </Button>
             </VStack>
           </HStack>
         ) : null}
