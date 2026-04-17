@@ -497,13 +497,16 @@ export async function downloadAttachment(attachmentId: number): Promise<Blob> {
 }
 
 // Sub-task interfaces
+// Response DTO from backend (Clean Architecture - Interface Layer)
 export interface SubTask {
   id: number
   taskId: number
   title: string
   description: string | null
-  assigneeId: number | null
-  assigneeName: string | null
+  assignee: {
+    id: number
+    name: string
+  } | null
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
   position: number

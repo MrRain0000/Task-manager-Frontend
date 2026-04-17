@@ -607,9 +607,9 @@ export default function TaskDetailsModal({
                                   >
                                     {subTask.title}
                                   </Text>
-                                  {subTask.assigneeName && (
+                                  {subTask.assignee && (
                                     <Badge size="sm" variant="subtle" colorPalette="gray">
-                                      {subTask.assigneeName}
+                                      {subTask.assignee.name}
                                     </Badge>
                                   )}
                                 </HStack>
