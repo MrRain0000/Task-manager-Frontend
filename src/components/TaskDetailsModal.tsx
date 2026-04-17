@@ -10,6 +10,7 @@ import {
   Separator,
   Card,
   Menu,
+  Dialog,
 } from '@chakra-ui/react'
 import {
   FiX,
@@ -25,6 +26,7 @@ import {
   FiFile,
   FiImage,
   FiFileText,
+  FiAlertCircle,
 } from 'react-icons/fi'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
@@ -42,6 +44,7 @@ import {
   updateSubTask,
   deleteSubTask,
   reorderSubTasks,
+  updateTaskStatus,
   type Task,
   type ActivityLog,
   type ProjectMember,
@@ -84,6 +87,17 @@ export default function TaskDetailsModal({
   const [newSubTaskTitle, setNewSubTaskTitle] = useState('')
   const [editingSubTaskId, setEditingSubTaskId] = useState<number | null>(null)
   const [editingSubTaskTitle, setEditingSubTaskTitle] = useState('')
+
+  // Error dialog state
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false)
+  const [incompleteSubTasksList, setIncompleteSubTasksList] = useState<SubTask[]>([])
+
+  // Toast notification state
+  const [toast, setToast] = useState<{
+    show: boolean
+    message: string
+    subTasks: SubTask[]
+  }>({ show: false, message: '', subTasks: [] })
 
   // Attachments state
   const [attachments, setAttachments] = useState<Attachment[]>([])
@@ -256,6 +270,38 @@ export default function TaskDetailsModal({
     return { bg: 'gray.50', color: 'gray.500' }
   }
 
+  // Handle task status change with sub-task validation
+  const handleStatusChange = async (newStatus: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED') => {
+    if (!task) return
+
+    // Check if trying to mark task as DONE with incomplete sub-tasks
+    if (newStatus === 'DONE') {
+      const incompleteSubTasks = subTasks.filter(st => st.status !== 'DONE')
+      if (incompleteSubTasks.length > 0) {
+        // Show immediate Toast notification on UI
+        setToast({
+          show: true,
+          message: `Không thể hoàn thành task vì còn ${incompleteSubTasks.length} sub-task chưa xong`,
+          subTasks: incompleteSubTasks
+        })
+        // Auto hide after 5 seconds
+        setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000)
+        // Also open detailed dialog
+        setIncompleteSubTasksList(incompleteSubTasks)
+        setErrorDialogOpen(true)
+        return
+      }
+    }
+
+    try {
+      const res = await updateTaskStatus(projectId, taskId, { status: newStatus })
+      setTask(res.data)
+    } catch (error: any) {
+      console.error('Failed to update task status:', error)
+      alert(error.message || 'Cập nhật trạng thái task thất bại')
+    }
+  }
+
   // Toggle subtask status (TODO <-> DONE)
   const toggleSubTask = async (subTaskId: number) => {
     const subTask = subTasks.find(st => st.id === subTaskId)
@@ -375,6 +421,55 @@ export default function TaskDetailsModal({
       p={4}
       onClick={onClose}
     >
+      {/* Toast Notification - Shows at top of modal */}
+      {toast.show && (
+        <Box
+          position="fixed"
+          top={20}
+          left="50%"
+          transform="translateX(-50%)"
+          bg="red.50"
+          border="1px solid"
+          borderColor="red.200"
+          borderRadius="md"
+          p={4}
+          boxShadow="2xl"
+          zIndex={9999}
+          maxW="500px"
+          w="90%"
+        >
+          <HStack gap={3} align="start">
+            <Icon as={FiAlertCircle} color="red.500" boxSize={5} mt={0.5} />
+            <VStack align="stretch" gap={2} flex={1}>
+              <Text fontWeight="semibold" color="red.700">
+                {toast.message}
+              </Text>
+              <VStack align="stretch" gap={1} pl={2}>
+                {toast.subTasks.slice(0, 3).map((st, idx) => (
+                  <Text key={st.id} fontSize="sm" color="gray.600">
+                    {idx + 1}. {st.title}
+                  </Text>
+                ))}
+                {toast.subTasks.length > 3 && (
+                  <Text fontSize="sm" color="gray.500" fontStyle="italic">
+                    ...và {toast.subTasks.length - 3} sub-task khác
+                  </Text>
+                )}
+              </VStack>
+              <Button
+                size="xs"
+                variant="ghost"
+                color="red.600"
+                alignSelf="end"
+                onClick={() => setToast(prev => ({ ...prev, show: false }))}
+              >
+                Đóng
+              </Button>
+            </VStack>
+          </HStack>
+        </Box>
+      )}
+
       <Card.Root
         bg="white"
         borderRadius="2xl"
@@ -764,19 +859,23 @@ export default function TaskDetailsModal({
                 <Text fontSize="xs" fontWeight="semibold" color="gray.500" textTransform="uppercase">
                   Status
                 </Text>
-                <Badge
-                  colorPalette={getStatusColor(task.status)}
-                  size="md"
-                  py={1}
-                  px={3}
-                  borderRadius="md"
-                  w="fit-content"
+                <select
+                  value={task.status}
+                  onChange={(e) => handleStatusChange(e.target.value as any)}
+                  style={{
+                    padding: '0.5rem',
+                    borderRadius: '0.375rem',
+                    border: '1px solid #E5E7EB',
+                    fontSize: '0.875rem',
+                    backgroundColor: 'white',
+                    cursor: 'pointer',
+                  }}
                 >
-                  <HStack gap={1}>
-                    <Box w={2} h={2} bg="currentColor" borderRadius="full" />
-                    <Text>{getStatusLabel(task.status)}</Text>
-                  </HStack>
-                </Badge>
+                  <option value="TODO">🟠 To Do</option>
+                  <option value="IN_PROGRESS">🔵 In Progress</option>
+                  <option value="DONE">🟢 Done</option>
+                  <option value="CANCELLED">⚪ Cancelled</option>
+                </select>
               </VStack>
 
               {/* Due Date */}
@@ -911,6 +1010,54 @@ export default function TaskDetailsModal({
             </VStack>
           </HStack>
         ) : null}
+
+        {/* Error Dialog - Incomplete Subtasks */}
+        <Dialog.Root open={errorDialogOpen} onOpenChange={(e) => setErrorDialogOpen(e.open)}>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content>
+              <Dialog.Header>
+                <Dialog.Title>
+                  <HStack gap={2}>
+                    <Icon as={FiAlertCircle} color="red.500" boxSize={5} />
+                    <Text>Không thể hoàn thành task</Text>
+                  </HStack>
+                </Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body>
+                <VStack align="stretch" gap={4}>
+                  <Text>
+                    Task chính chỉ được đánh dấu <strong>Done</strong> khi tất cả sub-tasks đã hoàn thành.
+                  </Text>
+                  <Text fontWeight="semibold" color="red.600">
+                    Còn {incompleteSubTasksList.length} sub-task chưa xong:
+                  </Text>
+                  <VStack align="stretch" gap={2} pl={4}>
+                    {incompleteSubTasksList.map((subTask, index) => (
+                      <HStack key={subTask.id} gap={2}>
+                        <Text color="gray.500">{index + 1}.</Text>
+                        <Badge colorPalette={subTask.status === 'TODO' ? 'orange' : subTask.status === 'IN_PROGRESS' ? 'blue' : 'gray'} size="sm">
+                          {subTask.status}
+                        </Badge>
+                        <Text>{subTask.title}</Text>
+                      </HStack>
+                    ))}
+                  </VStack>
+                  <Text fontSize="sm" color="gray.500">
+                    Vui lòng hoàn thành tất cả sub-task trước khi đánh dấu task chính hoàn thành.
+                  </Text>
+                </VStack>
+              </Dialog.Body>
+              <Dialog.Footer>
+                <Dialog.ActionTrigger asChild>
+                  <Button colorPalette="brand" onClick={() => setErrorDialogOpen(false)}>
+                    Đã hiểu
+                  </Button>
+                </Dialog.ActionTrigger>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Dialog.Root>
       </Card.Root>
     </Box>
   )
