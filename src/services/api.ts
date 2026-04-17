@@ -163,10 +163,12 @@ async function fetchApiWithRetry<T>(
   const url = `${API_BASE_URL}${endpoint}`
   const token = getToken()
 
+  // Don't set Content-Type for FormData (browser will set with boundary)
+  const isFormData = options.body instanceof FormData
   const config: RequestInit = {
     headers: {
-      'Content-Type': 'application/json',
       ...(token && { Authorization: `Bearer ${token}` }),
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...options.headers,
     },
     ...options,
