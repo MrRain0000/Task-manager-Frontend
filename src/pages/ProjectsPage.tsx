@@ -14,10 +14,10 @@ import {
   Portal,
   Avatar,
 } from '@chakra-ui/react'
-import { FiPlus, FiSearch, FiMoreHorizontal, FiCalendar } from 'react-icons/fi'
+import { FiPlus, FiSearch, FiMoreHorizontal, FiCalendar, FiX, FiUser } from 'react-icons/fi'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getProjects, createProject, deleteProject, getProjectDetail, type Project } from '../services/api'
+import { getProjects, createProject, deleteProject, getProjectDetail, inviteMember, type Project } from '../services/api'
 import Layout from '../components/Layout'
 
 // Component hiển thị avatar thành viên (1-2 người + số còn lại)
@@ -91,6 +91,9 @@ export default function ProjectsPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newProjectName, setNewProjectName] = useState('')
   const [newProjectDesc, setNewProjectDesc] = useState('')
+  const [newProjectDueDate, setNewProjectDueDate] = useState('')
+  const [inviteEmails, setInviteEmails] = useState<string[]>([])
+  const [currentEmail, setCurrentEmail] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
   useEffect(() => {
@@ -119,15 +122,38 @@ export default function ProjectsPage() {
     setIsCreating(true)
     try {
       const response = await createProject({ name: newProjectName, description: newProjectDesc })
-      setProjects(prev => [...prev, response.data])
+      const newProject = response.data
+
+      // Invite members if any emails were added
+      if (inviteEmails.length > 0) {
+        await Promise.all(
+          inviteEmails.map(email => inviteMember(newProject.id, email))
+        )
+      }
+
+      setProjects(prev => [...prev, newProject])
       setNewProjectName('')
       setNewProjectDesc('')
+      setNewProjectDueDate('')
+      setInviteEmails([])
+      setCurrentEmail('')
       setIsCreateOpen(false)
     } catch (error) {
       console.error('Failed to create project:', error)
     } finally {
       setIsCreating(false)
     }
+  }
+
+  const handleAddEmail = () => {
+    if (currentEmail && !inviteEmails.includes(currentEmail)) {
+      setInviteEmails([...inviteEmails, currentEmail])
+      setCurrentEmail('')
+    }
+  }
+
+  const handleRemoveEmail = (email: string) => {
+    setInviteEmails(inviteEmails.filter(e => e !== email))
   }
 
   const handleDeleteProject = async (projectId: number) => {
@@ -266,35 +292,133 @@ export default function ProjectsPage() {
         <Portal>
           <Dialog.Backdrop />
           <Dialog.Positioner>
-            <Dialog.Content borderRadius="2xl">
+            <Dialog.Content borderRadius="2xl" maxW="500px">
               <Dialog.Header>
                 <Dialog.Title>Create New Project</Dialog.Title>
+                <Dialog.CloseTrigger asChild>
+                  <Box position="absolute" right={4} top={4} cursor="pointer" onClick={() => setIsCreateOpen(false)}>
+                    <Icon as={FiX} boxSize={5} color="gray.400" />
+                  </Box>
+                </Dialog.CloseTrigger>
               </Dialog.Header>
               <Dialog.Body>
-                <VStack gap={4} align="stretch">
+                <VStack gap={5} align="stretch">
                   <Field.Root required>
-                    <Field.Label>Project Name</Field.Label>
+                    <Field.Label fontSize="sm" fontWeight="medium">Project Name</Field.Label>
                     <Input
                       placeholder="e.g. Q3 Strategic Planning"
                       value={newProjectName}
                       onChange={(e) => setNewProjectName(e.target.value)}
+                      bg="gray.50"
+                      border="1px solid"
+                      borderColor="gray.200"
+                      _focus={{ borderColor: 'brand.500', bg: 'white' }}
                     />
                   </Field.Root>
+
                   <Field.Root>
-                    <Field.Label>Description</Field.Label>
-                    <Input
-                      as="textarea"
+                    <Field.Label fontSize="sm" fontWeight="medium">Description</Field.Label>
+                    <textarea
                       placeholder="Describe the project goals and core objectives..."
                       value={newProjectDesc}
                       onChange={(e) => setNewProjectDesc(e.target.value)}
-                      h="100px"
+                      style={{
+                        height: '100px',
+                        backgroundColor: '#F9FAFB',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '0.375rem',
+                        padding: '0.75rem',
+                        fontSize: '0.875rem',
+                        resize: 'vertical',
+                        width: '100%',
+                      }}
                     />
                   </Field.Root>
+
+                  {/* Team Section */}
+                  <Box>
+                    <Text fontSize="sm" fontWeight="medium" mb={2}>Team</Text>
+                    <HStack gap={2}>
+                      {inviteEmails.length === 0 ? (
+                        <Box
+                          w="40px"
+                          h="40px"
+                          borderRadius="full"
+                          border="2px dashed"
+                          borderColor="gray.300"
+                          display="flex"
+                          alignItems="center"
+                          justifyContent="center"
+                        >
+                          <Icon as={FiUser} color="gray.400" boxSize={4} />
+                        </Box>
+                      ) : (
+                        inviteEmails.map((email) => (
+                          <Box key={email} position="relative">
+                            <Avatar.Root size="sm" border="2px solid white">
+                              <Avatar.Fallback
+                                name={email}
+                                bg="brand.100"
+                                color="brand.700"
+                                fontSize="xs"
+                              />
+                            </Avatar.Root>
+                            <Box
+                              position="absolute"
+                              top={-1}
+                              right={-1}
+                              w="14px"
+                              h="14px"
+                              bg="red.500"
+                              borderRadius="full"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                              cursor="pointer"
+                              onClick={() => handleRemoveEmail(email)}
+                            >
+                              <Icon as={FiX} color="white" boxSize={2} />
+                            </Box>
+                          </Box>
+                        ))
+                      )}
+                      <Input
+                        placeholder="Add members (email)"
+                        value={currentEmail}
+                        onChange={(e) => setCurrentEmail(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddEmail())}
+                        w="200px"
+                        size="sm"
+                        bg="gray.50"
+                      />
+                    </HStack>
+                  </Box>
+
+                  {/* Due Date Section */}
+                  <Box>
+                    <Text fontSize="sm" fontWeight="medium" mb={2}>Due Date</Text>
+                    <HStack>
+                      <Input
+                        type="date"
+                        value={newProjectDueDate}
+                        onChange={(e) => setNewProjectDueDate(e.target.value)}
+                        bg="gray.50"
+                        border="1px solid"
+                        borderColor="gray.200"
+                        size="sm"
+                        w="150px"
+                      />
+                      <HStack gap={1} color="gray.500" fontSize="sm">
+                        <Icon as={FiCalendar} boxSize={4} />
+                        <Text>{newProjectDueDate ? new Date(newProjectDueDate).toLocaleDateString('vi-VN') : 'Set date'}</Text>
+                      </HStack>
+                    </HStack>
+                  </Box>
                 </VStack>
               </Dialog.Body>
-              <Dialog.Footer>
+              <Dialog.Footer gap={3}>
                 <Dialog.ActionTrigger asChild>
-                  <Button variant="ghost">Cancel</Button>
+                  <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>Cancel</Button>
                 </Dialog.ActionTrigger>
                 <Button
                   colorPalette="brand"

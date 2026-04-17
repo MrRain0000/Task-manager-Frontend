@@ -8,6 +8,7 @@ import TeamPage from './pages/TeamPage'
 import ProjectDetailsPage from './pages/ProjectDetailsPage'
 import VerifyEmailPage from './pages/VerifyEmailPage'
 import ProfilePage from './pages/ProfilePage'
+import MyTasksPage from './pages/MyTasksPage'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
         <Route path="/invitations" element={<InvitationsPage />} />
         <Route path="/team" element={<TeamPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/my-tasks" element={<MyTasksPage />} />
       </Routes>
     </Router>
   )
