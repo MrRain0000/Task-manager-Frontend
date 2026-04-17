@@ -219,21 +219,24 @@ export default function Layout({ children }: LayoutProps) {
             <Text fontSize="xs" fontWeight="semibold" color="gray.400" px={3} textTransform="uppercase">
               Tasks
             </Text>
-            <Box
-              px={3}
-              py={2.5}
-              borderRadius="lg"
-              display="flex"
-              alignItems="center"
-              gap={3}
-              color="gray.600"
-              fontWeight="medium"
-              _hover={{ bg: 'gray.50' }}
-              cursor="pointer"
-            >
-              <Icon as={FiCheckSquare} boxSize={5} />
-              <Text>My Tasks</Text>
-            </Box>
+            <Link to="/my-tasks" style={{ textDecoration: 'none' }}>
+              <Box
+                px={3}
+                py={2.5}
+                borderRadius="lg"
+                display="flex"
+                alignItems="center"
+                gap={3}
+                color={location.pathname === '/my-tasks' ? 'brand.600' : 'gray.600'}
+                fontWeight={location.pathname === '/my-tasks' ? 'semibold' : 'medium'}
+                bg={location.pathname === '/my-tasks' ? 'brand.50' : 'transparent'}
+                _hover={{ bg: location.pathname === '/my-tasks' ? 'brand.50' : 'gray.50' }}
+                cursor="pointer"
+              >
+                <Icon as={FiCheckSquare} boxSize={5} />
+                <Text>My Tasks</Text>
+              </Box>
+            </Link>
             <Box
               px={3}
               py={2.5}
@@ -300,11 +303,13 @@ export default function Layout({ children }: LayoutProps) {
           gap={4}
         >
           <Icon as={FiSettings} boxSize={5} color="gray.500" cursor="pointer" />
-          <HStack gap={3}>
-            <Avatar.Root size="sm">
-              <Avatar.Fallback name={user.username} />
-            </Avatar.Root>
-          </HStack>
+          <Link to="/profile" style={{ textDecoration: 'none' }}>
+            <HStack gap={3} cursor="pointer" _hover={{ opacity: 0.8 }}>
+              <Avatar.Root size="sm">
+                <Avatar.Fallback name={user.username} />
+              </Avatar.Root>
+            </HStack>
+          </Link>
         </Box>
 
         {/* Page Content */}
