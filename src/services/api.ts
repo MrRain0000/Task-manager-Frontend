@@ -165,13 +165,23 @@ async function fetchApiWithRetry<T>(
 
   // Don't set Content-Type for FormData (browser will set with boundary)
   const isFormData = options.body instanceof FormData
+
+  // Build headers carefully to ensure token is always included
+  const mergedHeaders = new Headers(options.headers)
+
+  // Only set Content-Type if not FormData
+  if (!isFormData && !mergedHeaders.has('Content-Type')) {
+    mergedHeaders.set('Content-Type', 'application/json')
+  }
+
+  // Always set auth token (override any existing)
+  if (token) {
+    mergedHeaders.set('Authorization', `Bearer ${token}`)
+  }
+
   const config: RequestInit = {
-    headers: {
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-      ...options.headers,
-    },
     ...options,
+    headers: mergedHeaders,
   }
 
   const response = await fetch(url, config)
