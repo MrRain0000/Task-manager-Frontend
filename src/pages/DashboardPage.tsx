@@ -21,6 +21,7 @@ import {
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getProjects, getMyInvitations, getProjectDetail, getActivityLogs, type Project, type Invitation, type ActivityLog } from '../services/api'
+import BurndownVelocityChart from '../components/BurndownVelocityChart'
 import Layout from '../components/Layout'
 
 // Component hiển thị avatar thành viên (1-2 người + số còn lại)
@@ -201,9 +202,7 @@ export default function DashboardPage() {
                     <Badge variant="outline">Monthly</Badge>
                   </HStack>
                 </HStack>
-                <Box h="200px" bg="gray.50" borderRadius="xl" display="flex" alignItems="center" justifyContent="center">
-                  <Text color="gray.400">Chart visualization would go here</Text>
-                </Box>
+                <BurndownVelocityChart />
               </Card.Root>
 
               {/* Active Milestones */}
