@@ -9,7 +9,7 @@ import {
   Cell,
 } from 'recharts'
 import { Box, HStack, Text, Badge, Spinner } from '@chakra-ui/react'
-import { getProjects, getProjectDetail, type ProjectDetail, type Project } from '../services/api'
+import { getDashboardStats, type DashboardStats } from '../services/api'
 
 interface DayData {
   day: string
@@ -46,23 +46,34 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   return null
 }
 
+// Get day name from date string (YYYY-MM-DD)
+const getDayName = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+  return days[date.getDay()]
+}
+
+// Format date for display
+const formatDate = (dateStr: string): string => {
+  const date = new Date(dateStr)
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
 export default function BurndownVelocityChart() {
   const [viewMode, setViewMode] = useState<'status' | 'weekly'>('status')
-  const [project, setProject] = useState<Project | null>(null)
-  const [projectDetail, setProjectDetail] = useState<ProjectDetail | null>(null)
+  const [stats, setStats] = useState<DashboardStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // Single API call to get project with taskSummary
+  // Single API call to get dashboard stats
   useEffect(() => {
     const loadData = async () => {
       // Check cache first (valid for 5 minutes)
-      const cacheKey = 'project_velocity_cache'
+      const cacheKey = 'dashboard_velocity_cache'
       const cached = localStorage.getItem(cacheKey)
       if (cached) {
         const { timestamp, data } = JSON.parse(cached)
         if (Date.now() - timestamp < 5 * 60 * 1000) {
-          setProject(data.project)
-          setProjectDetail(data.detail)
+          setStats(data)
           setIsLoading(false)
           return
         }
@@ -70,26 +81,14 @@ export default function BurndownVelocityChart() {
 
       setIsLoading(true)
       try {
-        // Get first project only
-        const projectsRes = await getProjects()
-        const projectList = projectsRes.data.projects || []
-        
-        if (projectList.length === 0) {
-          setIsLoading(false)
-          return
-        }
-
-        const firstProject = projectList[0]
-        setProject(firstProject)
-
-        // Get project detail with taskSummary - SINGLE API CALL
-        const detailRes = await getProjectDetail(firstProject.id)
-        setProjectDetail(detailRes.data)
+        // Get dashboard stats - SINGLE API CALL
+        const statsRes = await getDashboardStats()
+        setStats(statsRes.data)
 
         // Save to cache
         localStorage.setItem(cacheKey, JSON.stringify({
           timestamp: Date.now(),
-          data: { project: firstProject, detail: detailRes.data }
+          data: statsRes.data
         }))
       } catch (error) {
         console.error('Failed to load velocity data:', error)
@@ -101,9 +100,10 @@ export default function BurndownVelocityChart() {
     loadData()
   }, [])
 
-  // Calculate data from taskSummary
+  // Calculate data from dashboard stats
   const { statusData, weeklyData, totalCompleted } = useMemo(() => {
-    const summary = projectDetail?.taskSummary
+    const summary = stats?.taskSummary
+    const weeklyVelocity = stats?.weeklyVelocity
     
     if (!summary) {
       return {
@@ -113,7 +113,7 @@ export default function BurndownVelocityChart() {
       }
     }
 
-    // Status breakdown chart (replaces historical velocity)
+    // Status breakdown chart
     const statusData: DayData[] = [
       { day: 'TODO', fullDay: 'To Do', value: summary.todoCount, isToday: false },
       { day: 'DOING', fullDay: 'In Progress', value: summary.inProgressCount, isToday: true },
@@ -121,24 +121,41 @@ export default function BurndownVelocityChart() {
       { day: 'CANC', fullDay: 'Cancelled', value: summary.cancelledCount, isToday: false },
     ]
 
-    // Weekly view (simplified - distribute tasks by status)
-    const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-    const weeklyData: DayData[] = days.map((day, i) => ({
-      day,
-      fullDay: day,
-      value: i === 4 ? summary.doneCount : Math.floor(summary.doneCount / 7), // Today is THU
-      isToday: i === 4, // Thursday as today
-    }))
+    // Weekly velocity from API data
+    let weeklyData: DayData[] = []
+    if (weeklyVelocity && weeklyVelocity.length > 0) {
+      weeklyData = weeklyVelocity.map((item, index) => {
+        const dayName = getDayName(item.date)
+        const isToday = index === weeklyVelocity.length - 1 // Last day is today
+        return {
+          day: dayName,
+          fullDay: formatDate(item.date),
+          value: item.completedCount,
+          isToday,
+        }
+      })
+    } else {
+      // Fallback if no weekly data
+      const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+      const today = new Date().getDay()
+      weeklyData = days.map((day, i) => ({
+        day,
+        fullDay: day,
+        value: i === today ? summary.doneCount : 0,
+        isToday: i === today,
+      }))
+    }
 
     return {
       statusData,
       weeklyData,
       totalCompleted: summary.doneCount,
     }
-  }, [projectDetail])
+  }, [stats])
 
   const data = viewMode === 'status' ? statusData : weeklyData
-  const totalTasks = projectDetail?.taskSummary?.totalTasks || 0
+  const totalTasks = stats?.totalTasks || 0
+  const topProject = stats?.topProjects?.[0]
 
   if (isLoading) {
     return (
@@ -148,10 +165,10 @@ export default function BurndownVelocityChart() {
     )
   }
 
-  if (!project) {
+  if (!stats) {
     return (
       <Box minH="200px" display="flex" alignItems="center" justifyContent="center">
-        <Text fontSize="sm" color="gray.400">No active project</Text>
+        <Text fontSize="sm" color="gray.400">No data available</Text>
       </Box>
     )
   }
@@ -162,7 +179,7 @@ export default function BurndownVelocityChart() {
       <HStack justify="space-between" mb={4}>
         <Box>
           <Text fontSize="sm" fontWeight="semibold" color="gray.700">
-            {project.name} - Task Overview
+            {topProject?.projectName || 'All Projects'} - Task Overview
           </Text>
           <HStack gap={4} mt={1}>
             <Text fontSize="xs" color="gray.500">
@@ -220,15 +237,15 @@ export default function BurndownVelocityChart() {
                 radius={[4, 4, 4, 4]}
                 maxBarSize={50}
               >
-                {data.map((_, index) => {
+                {data.map((entry, index) => {
                   // Different colors for different statuses
                   const colors = viewMode === 'status' 
                     ? ['#F59E0B', '#3B82F6', '#10B981', '#6B7280'] // TODO, DOING, DONE, CANC
-                    : ['#A5B4FC', '#A5B4FC', '#A5B4FC', '#0F4C81', '#A5B4FC', '#A5B4FC', '#A5B4FC']
+                    : entry.isToday ? '#0F4C81' : '#A5B4FC' // Today vs other days for weekly
                   return (
                     <Cell
                       key={`cell-${index}`}
-                      fill={colors[index % colors.length]}
+                      fill={Array.isArray(colors) ? colors[index % colors.length] : colors}
                     />
                   )
                 })}
@@ -267,7 +284,7 @@ export default function BurndownVelocityChart() {
             </HStack>
             <HStack gap={2}>
               <Box w={3} h={3} bg="#0F4C81" borderRadius="sm" />
-              <Text fontSize="xs" color="gray.500">Today (Thu)</Text>
+              <Text fontSize="xs" color="gray.500">Today</Text>
             </HStack>
           </>
         )}

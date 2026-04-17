@@ -20,7 +20,7 @@ import {
 } from 'react-icons/fi'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getProjects, getMyInvitations, getProjectDetail, getActivityLogs, type Project, type Invitation, type ActivityLog } from '../services/api'
+import { getProjects, getMyInvitations, getProjectDetail, getDashboardStats, type Project, type Invitation, type ActivityLog, type DashboardStats } from '../services/api'
 import BurndownVelocityChart from '../components/BurndownVelocityChart'
 import Layout from '../components/Layout'
 
@@ -89,6 +89,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [invitations, setInvitations] = useState<Invitation[]>([])
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
   const [, setIsLoading] = useState(true)
 
   useEffect(() => {
@@ -102,27 +103,60 @@ export default function DashboardPage() {
 
   const loadData = async () => {
     try {
+      // Check cache first (valid for 5 minutes)
+      const cacheKey = 'dashboard_stats_cache'
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const { timestamp, data } = JSON.parse(cached)
+        if (Date.now() - timestamp < 5 * 60 * 1000) {
+          setProjects(data.projects)
+          setRecentActivity(data.activities)
+          setInvitations(data.invitations)
+          setDashboardStats(data.stats)
+          setIsLoading(false)
+          return
+        }
+      }
+
+      // Get dashboard stats - SINGLE API CALL for all stats
+      const statsRes = await getDashboardStats()
+      const stats = statsRes.data
+      setDashboardStats(stats)
+
       const projectsRes = await getProjects()
       const loadedProjects = projectsRes.data.projects || []
       setProjects(loadedProjects)
 
-      // Load recent activity from all projects
+      // Load recent activity from first project only for display
       setIsLoadingActivity(true)
-      const allActivities: ActivityLog[] = []
-      for (const project of loadedProjects.slice(0, 5)) { // Limit to 5 projects for performance
+      let allActivities: ActivityLog[] = []
+      if (loadedProjects.length > 0) {
         try {
-          const logsRes = await getActivityLogs(project.id, 0, 5)
-          allActivities.push(...(logsRes.data.content || []))
+          const { getActivityLogs } = await import('../services/api')
+          const logsRes = await getActivityLogs(loadedProjects[0].id, 0, 10)
+          allActivities = logsRes.data.content || []
         } catch (error) {
-          // Skip if can't load activity for this project
+          console.log('Failed to load activity logs')
         }
       }
-      // Sort by createdAt desc and take top 10
       allActivities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setRecentActivity(allActivities.slice(0, 10))
       setIsLoadingActivity(false)
+
       const invitationsRes = await getMyInvitations()
-      setInvitations(invitationsRes.filter(i => i.status === 'PENDING'))
+      const pendingInvites = invitationsRes.filter(i => i.status === 'PENDING')
+      setInvitations(pendingInvites)
+
+      // Save to cache
+      localStorage.setItem(cacheKey, JSON.stringify({
+        timestamp: Date.now(),
+        data: {
+          projects: loadedProjects,
+          activities: allActivities.slice(0, 10),
+          invitations: pendingInvites,
+          stats
+        }
+      }))
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
     } finally {
@@ -131,9 +165,27 @@ export default function DashboardPage() {
   }
 
   const stats = [
-    { label: 'Completed', value: '128', change: '+14%', icon: FiCheckCircle, color: 'green' },
-    { label: 'Active Tasks', value: '32', change: '', icon: FiClock, color: 'blue' },
-    { label: 'Team Invites', value: invitations.length.toString(), change: 'ACTION REQUIRED', icon: FiUsers, color: 'orange' },
+    { 
+      label: 'Completed', 
+      value: (dashboardStats?.taskSummary?.doneCount || 0).toString(), 
+      change: dashboardStats?.recentCompletedTasks ? `+${dashboardStats.recentCompletedTasks}` : '', 
+      icon: FiCheckCircle, 
+      color: 'green' 
+    },
+    { 
+      label: 'Active Tasks', 
+      value: (dashboardStats?.activeTasks || 0).toString(), 
+      change: '', 
+      icon: FiClock, 
+      color: 'blue' 
+    },
+    { 
+      label: 'Team Invites', 
+      value: (dashboardStats?.pendingInvitations || invitations.length || 0).toString(), 
+      change: (dashboardStats?.pendingInvitations || invitations.length) > 0 ? 'ACTION REQUIRED' : '', 
+      icon: FiUsers, 
+      color: 'orange' 
+    },
   ]
 
   const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([])

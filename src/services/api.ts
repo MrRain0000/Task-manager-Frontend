@@ -402,6 +402,37 @@ export async function changeUserPassword(currentPassword: string, newPassword: s
   })
 }
 
+// Dashboard Stats API
+export interface DashboardStats {
+  totalProjects: number
+  totalTasks: number
+  taskSummary: {
+    todoCount: number
+    inProgressCount: number
+    doneCount: number
+    cancelledCount: number
+  }
+  recentCompletedTasks: number
+  activeTasks: number
+  pendingInvitations: number
+  weeklyVelocity: {
+    date: string
+    completedCount: number
+  }[]
+  topProjects: {
+    projectId: number
+    projectName: string
+    totalTasks: number
+    doneCount: number
+  }[]
+}
+
+export async function getDashboardStats(): Promise<ApiResponse<DashboardStats>> {
+  return fetchApi<DashboardStats>('/api/users/me/dashboard-stats', {
+    method: 'GET',
+  })
+}
+
 // Activity Logs APIs
 export async function getActivityLogs(projectId: number, page: number = 0, size: number = 20): Promise<ApiResponse<{
   content: ActivityLog[]

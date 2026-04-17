@@ -996,9 +996,75 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
 
 ---
 
-## 10. File Upload Configuration
+## 10. Dashboard Statistics (Thống kê tổng quan)
 
-### 10.1 Storage Configuration
+> API tổng hợp dữ liệu thống kê từ tất cả projects của user. Dùng cho dashboard overview để tránh gọi nhiều API riêng lẻ.
+
+### 10.1 Get User Dashboard Stats
+- **URL**: `GET /api/users/me/dashboard-stats`
+- **Auth Required**: Yes
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Lấy thống kê dashboard thành công",
+    "data": {
+        "totalProjects": 5,
+        "totalTasks": 42,
+        "taskSummary": {
+            "todoCount": 12,
+            "inProgressCount": 8,
+            "doneCount": 18,
+            "cancelledCount": 4
+        },
+        "recentCompletedTasks": 3,
+        "activeTasks": 20,
+        "pendingInvitations": 2,
+        "weeklyVelocity": [
+            {"date": "2024-01-15", "completedCount": 2},
+            {"date": "2024-01-16", "completedCount": 1},
+            {"date": "2024-01-17", "completedCount": 3},
+            {"date": "2024-01-18", "completedCount": 0},
+            {"date": "2024-01-19", "completedCount": 4},
+            {"date": "2024-01-20", "completedCount": 2},
+            {"date": "2024-01-21", "completedCount": 1}
+        ],
+        "topProjects": [
+            {
+                "projectId": 1,
+                "projectName": "Website Redesign",
+                "totalTasks": 15,
+                "doneCount": 8
+            },
+            {
+                "projectId": 2,
+                "projectName": "Mobile App",
+                "totalTasks": 12,
+                "doneCount": 5
+            }
+        ]
+    }
+}
+```
+- **Business Rules**:
+  - Chỉ tính các project mà user là thành viên ACCEPTED.
+  - `taskSummary` tổng hợp từ tất cả projects.
+  - `recentCompletedTasks`: Số task DONE trong 7 ngày gần nhất.
+  - `activeTasks`: Tổng số task có status TODO hoặc DOING.
+  - `weeklyVelocity`: Thống kê task hoàn thành theo ngày trong 7 ngày gần nhất.
+  - `topProjects`: 5 projects có nhiều task nhất (sắp xếp theo totalTasks giảm dần).
+- **Performance**:
+  - Backend thực hiện aggregation query thay vì gọi nhiều API riêng lẻ.
+  - Nên cache kết quả 5 phút ở backend để giảm load database.
+- **Error Cases**:
+  - `401`: User chưa đăng nhập.
+  - `429`: Rate limit nếu gọi quá nhiều (giới hạn 30 requests/phút).
+
+---
+
+## 11. File Upload Configuration
+
+### 11.1 Storage Configuration
 - **Storage Type**: Local filesystem (có thể mở rộng S3/Cloud sau)
 - **Upload Directory**: `./uploads/attachments/{year}/{month}/{day}/`
 - **Max File Size**: 10MB
