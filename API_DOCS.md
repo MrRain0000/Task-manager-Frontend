@@ -870,3 +870,140 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
   - `400`: Mật khẩu hiện tại không đúng.
   - `400`: Mật khẩu mới ít hơn 6 ký tự.
 
+---
+
+## 9. Attachments (File đính kèm Task)
+
+> Quản lý file đính kèm cho từng task. File được upload lên server và lưu đường dẫn/URL trong database.
+
+### 9.1 Upload file đính kèm
+- **URL**: `POST /api/tasks/{taskId}/attachments`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project chứa task)
+- **Content-Type**: `multipart/form-data`
+- **Request Body**:
+  - `file` (File, Required): File cần upload (max 10MB)
+  - `description` (String, Optional): Mô tả file
+- **Response** (201 Created):
+```json
+{
+    "status": 201,
+    "message": "Upload file thành công",
+    "data": {
+        "id": 1,
+        "fileName": "design-mockup.png",
+        "fileType": "image/png",
+        "fileSize": 2048000,
+        "fileUrl": "/uploads/attachments/2024/01/15/design-mockup-uuid.png",
+        "description": "Mockup màn hình login",
+        "uploadedBy": {
+            "id": 1,
+            "username": "Nguyen Van A"
+        },
+        "uploadedAt": "2024-01-15T10:30:00",
+        "taskId": 5
+    }
+}
+```
+- **Business Rules**:
+  - User phải là thành viên ACCEPTED của project chứa task.
+  - File size tối đa: 10MB.
+  - Allowed types: `image/*`, `application/pdf`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `text/plain`.
+  - File được lưu trữ với tên unique (UUID) để tránh trùng lặp.
+  - `ATTACHMENT_UPLOADED` activity log sẽ được tạo tự động.
+- **Error Cases**:
+  - `400`: File quá lớn (>10MB) hoặc định dạng không hỗ trợ.
+  - `403`: User không phải thành viên ACCEPTED của project.
+  - `404`: Task không tồn tại.
+
+### 9.2 Lấy danh sách file đính kèm của Task
+- **URL**: `GET /api/tasks/{taskId}/attachments`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project chứa task)
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Lấy danh sách file đính kèm thành công",
+    "data": [
+        {
+            "id": 1,
+            "fileName": "design-mockup.png",
+            "fileType": "image/png",
+            "fileSize": 2048000,
+            "fileUrl": "/uploads/attachments/2024/01/15/design-mockup-uuid.png",
+            "description": "Mockup màn hình login",
+            "uploadedBy": {
+                "id": 1,
+                "username": "Nguyen Van A"
+            },
+            "uploadedAt": "2024-01-15T10:30:00",
+            "taskId": 5
+        },
+        {
+            "id": 2,
+            "fileName": "requirements.docx",
+            "fileType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileSize": 1024000,
+            "fileUrl": "/uploads/attachments/2024/01/15/requirements-uuid.docx",
+            "description": "Tài liệu yêu cầu",
+            "uploadedBy": {
+                "id": 2,
+                "username": "Tran Van B"
+            },
+            "uploadedAt": "2024-01-15T11:00:00",
+            "taskId": 5
+        }
+    ]
+}
+```
+- **Business Rules**:
+  - Trả về danh sách file sắp xếp theo `uploadedAt` giảm dần (mới nhất trước).
+  - Chỉ thành viên ACCEPTED của project mới có thể xem.
+- **Error Cases**:
+  - `403`: User không phải thành viên ACCEPTED của project.
+  - `404`: Task không tồn tại.
+
+### 9.3 Xóa file đính kèm
+- **URL**: `DELETE /api/attachments/{attachmentId}`
+- **Auth Required**: Yes (Người upload file HOẶC OWNER của project)
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Xóa file thành công",
+    "data": null
+}
+```
+- **Business Rules**:
+  - Chỉ người upload file hoặc OWNER của project mới có quyền xóa.
+  - File vật lý trên server cũng bị xóa.
+  - `ATTACHMENT_DELETED` activity log sẽ được tạo tự động.
+- **Error Cases**:
+  - `403`: User không phải người upload và không phải OWNER.
+  - `404`: File đính kèm không tồn tại.
+
+### 9.4 Download file đính kèm
+- **URL**: `GET /api/attachments/{attachmentId}/download`
+- **Auth Required**: Yes (Thành viên ACCEPTED của project)
+- **Response**: File binary với headers:
+  - `Content-Type`: MIME type của file
+  - `Content-Disposition`: `attachment; filename="original-filename.png"`
+- **Business Rules**:
+  - Chỉ thành viên ACCEPTED của project mới có thể download.
+  - Trả về file gốc từ server.
+- **Error Cases**:
+  - `403`: User không phải thành viên ACCEPTED của project.
+  - `404`: File đính kèm không tồn tại.
+
+---
+
+## 10. File Upload Configuration
+
+### 10.1 Storage Configuration
+- **Storage Type**: Local filesystem (có thể mở rộng S3/Cloud sau)
+- **Upload Directory**: `./uploads/attachments/{year}/{month}/{day}/`
+- **Max File Size**: 10MB
+- **Allowed MIME Types**:
+  - Images: `image/jpeg`, `image/png`, `image/gif`, `image/webp`
+  - Documents: `application/pdf`, `application/msword`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+  - Text: `text/plain`
+

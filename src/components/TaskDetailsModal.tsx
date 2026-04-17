@@ -27,7 +27,21 @@ import {
   FiFileText,
 } from 'react-icons/fi'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getTaskDetail, getActivityLogs, updateTask, assignTask, deleteTask, type Task, type ActivityLog, type ProjectMember } from '../services/api'
+import {
+  getTaskDetail,
+  getActivityLogs,
+  updateTask,
+  assignTask,
+  deleteTask,
+  getTaskAttachments,
+  uploadAttachment,
+  deleteAttachment,
+  downloadAttachment,
+  type Task,
+  type ActivityLog,
+  type ProjectMember,
+  type Attachment,
+} from '../services/api'
 
 interface TaskDetailsModalProps {
   projectId: number
@@ -43,13 +57,6 @@ interface SubTask {
   id: string
   title: string
   completed: boolean
-}
-
-interface Attachment {
-  id: string
-  name: string
-  size: string
-  type: 'pdf' | 'image' | 'other'
 }
 
 export default function TaskDetailsModal({
@@ -79,6 +86,7 @@ export default function TaskDetailsModal({
 
   // Attachments state
   const [attachments, setAttachments] = useState<Attachment[]>([])
+  const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Mock labels
@@ -89,9 +97,10 @@ export default function TaskDetailsModal({
     
     setIsLoading(true)
     try {
-      const [taskRes, logsRes] = await Promise.all([
+      const [taskRes, logsRes, attachmentsRes] = await Promise.all([
         getTaskDetail(projectId, taskId),
         getActivityLogs(projectId, 0, 10),
+        getTaskAttachments(taskId),
       ])
       
       setTask(taskRes.data)
@@ -104,6 +113,9 @@ export default function TaskDetailsModal({
         (log) => log.entityType === 'TASK' && log.entityId === taskId
       )
       setActivityLogs(taskLogs)
+
+      // Load attachments
+      setAttachments(attachmentsRes.data || [])
     } catch (error) {
       console.error('Failed to load task details:', error)
     } finally {
@@ -164,55 +176,72 @@ export default function TaskDetailsModal({
     }
   }
 
-  const handleAddAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAddAttachment = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    Array.from(files).forEach((file) => {
-      const size = file.size < 1024 * 1024
-        ? `${(file.size / 1024).toFixed(1)} KB`
-        : `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-
-      const type: Attachment['type'] = file.type.startsWith('image/')
-        ? 'image'
-        : file.name.endsWith('.pdf')
-        ? 'pdf'
-        : 'other'
-
-      const newAttachment: Attachment = {
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        name: file.name,
-        size,
-        type,
+    setIsUploading(true)
+    try {
+      for (const file of Array.from(files)) {
+        const res = await uploadAttachment(taskId, file)
+        setAttachments(prev => [...prev, res.data])
       }
-
-      setAttachments(prev => [...prev, newAttachment])
-    })
-
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+    } catch (error) {
+      console.error('Failed to upload attachment:', error)
+      alert('Upload file thất bại')
+    } finally {
+      setIsUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
-  const handleRemoveAttachment = (id: string) => {
-    setAttachments(prev => prev.filter(a => a.id !== id))
-  }
+  const handleRemoveAttachment = async (id: number) => {
+    if (!window.confirm('Bạn có chắc muốn xóa file này?')) return
 
-  const getFileIcon = (type: Attachment['type']) => {
-    switch (type) {
-      case 'pdf': return FiFileText
-      case 'image': return FiImage
-      default: return FiFile
+    try {
+      await deleteAttachment(id)
+      setAttachments(prev => prev.filter(a => a.id !== id))
+    } catch (error) {
+      console.error('Failed to delete attachment:', error)
+      alert('Xóa file thất bại')
     }
   }
 
-  const getFileColor = (type: Attachment['type']) => {
-    switch (type) {
-      case 'pdf': return { bg: 'red.50', color: 'red.500' }
-      case 'image': return { bg: 'blue.50', color: 'blue.500' }
-      default: return { bg: 'gray.50', color: 'gray.500' }
+  const handleDownloadAttachment = async (attachment: Attachment) => {
+    try {
+      const blob = await downloadAttachment(attachment.id)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = attachment.fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Failed to download attachment:', error)
+      alert('Download file thất bại')
     }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  const getFileIcon = (fileType: string) => {
+    if (fileType.startsWith('image/')) return FiImage
+    if (fileType.includes('pdf')) return FiFileText
+    return FiFile
+  }
+
+  const getFileColor = (fileType: string) => {
+    if (fileType.startsWith('image/')) return { bg: 'blue.50', color: 'blue.500' }
+    if (fileType.includes('pdf')) return { bg: 'red.50', color: 'red.500' }
+    return { bg: 'gray.50', color: 'gray.500' }
   }
 
   const toggleSubTask = (subTaskId: string) => {
@@ -641,14 +670,14 @@ export default function TaskDetailsModal({
                   multiple
                 />
                 <VStack align="stretch" gap={2}>
-                  {attachments.length === 0 && (
-                    <Text fontSize="sm" color="gray.400" textAlign="center" py={2}>
-                      No attachments yet
+                  {isUploading && (
+                    <Text fontSize="sm" color="brand.500" textAlign="center" py={2}>
+                      Đang upload...
                     </Text>
                   )}
                   {attachments.map((attachment) => {
-                    const fileColors = getFileColor(attachment.type)
-                    const FileIcon = getFileIcon(attachment.type)
+                    const fileColors = getFileColor(attachment.fileType)
+                    const FileIcon = getFileIcon(attachment.fileType)
                     return (
                       <HStack
                         key={attachment.id}
@@ -660,6 +689,7 @@ export default function TaskDetailsModal({
                         borderColor="gray.100"
                         cursor="pointer"
                         _hover={{ borderColor: 'gray.200', bg: 'gray.50' }}
+                        onClick={() => handleDownloadAttachment(attachment)}
                       >
                         <Box
                           w={10}
@@ -674,10 +704,10 @@ export default function TaskDetailsModal({
                         </Box>
                         <VStack align="start" gap={0} flex={1}>
                           <Text fontSize="sm" fontWeight="medium" lineClamp={1}>
-                            {attachment.name}
+                            {attachment.fileName}
                           </Text>
                           <Text fontSize="xs" color="gray.400">
-                            {attachment.size}
+                            {formatFileSize(attachment.fileSize)}
                           </Text>
                         </VStack>
                         <Icon

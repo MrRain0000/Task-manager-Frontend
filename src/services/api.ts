@@ -140,6 +140,21 @@ export interface ActivityLog {
   createdAt: string
 }
 
+export interface Attachment {
+  id: number
+  fileName: string
+  fileType: string
+  fileSize: number
+  fileUrl: string
+  description?: string
+  uploadedBy: {
+    id: number
+    username: string
+  }
+  uploadedAt: string
+  taskId: number
+}
+
 async function fetchApiWithRetry<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -392,4 +407,48 @@ export async function getActivityLogs(projectId: number, page: number = 0, size:
   }>(`/api/projects/${projectId}/activity-logs?page=${page}&size=${size}`, {
     method: 'GET',
   })
+}
+
+// Attachment APIs
+export async function getTaskAttachments(taskId: number): Promise<ApiResponse<Attachment[]>> {
+  return fetchApi<Attachment[]>(`/api/tasks/${taskId}/attachments`, {
+    method: 'GET',
+  })
+}
+
+export async function uploadAttachment(taskId: number, file: File, description?: string): Promise<ApiResponse<Attachment>> {
+  const formData = new FormData()
+  formData.append('file', file)
+  if (description) {
+    formData.append('description', description)
+  }
+
+  return fetchApi<Attachment>(`/api/tasks/${taskId}/attachments`, {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type header for FormData - browser will set it with boundary
+    headers: {},
+  })
+}
+
+export async function deleteAttachment(attachmentId: number): Promise<ApiResponse<null>> {
+  return fetchApi<null>(`/api/attachments/${attachmentId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function downloadAttachment(attachmentId: number): Promise<Blob> {
+  const token = getToken()
+  const response = await fetch(`${API_BASE_URL}/api/attachments/${attachmentId}/download`, {
+    method: 'GET',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`)
+  }
+
+  return response.blob()
 }
