@@ -20,7 +20,7 @@ import {
 } from 'react-icons/fi'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getProjects, getMyInvitations, getProjectDetail, type Project, type Invitation } from '../services/api'
+import { getProjects, getMyInvitations, getProjectDetail, getActivityLogs, type Project, type Invitation, type ActivityLog } from '../services/api'
 import Layout from '../components/Layout'
 
 // Component hiển thị avatar thành viên (1-2 người + số còn lại)
@@ -102,8 +102,25 @@ export default function DashboardPage() {
   const loadData = async () => {
     try {
       const projectsRes = await getProjects()
+      const loadedProjects = projectsRes.data.projects || []
+      setProjects(loadedProjects)
+
+      // Load recent activity from all projects
+      setIsLoadingActivity(true)
+      const allActivities: ActivityLog[] = []
+      for (const project of loadedProjects.slice(0, 5)) { // Limit to 5 projects for performance
+        try {
+          const logsRes = await getActivityLogs(project.id, 0, 5)
+          allActivities.push(...(logsRes.data.content || []))
+        } catch (error) {
+          // Skip if can't load activity for this project
+        }
+      }
+      // Sort by createdAt desc and take top 10
+      allActivities.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      setRecentActivity(allActivities.slice(0, 10))
+      setIsLoadingActivity(false)
       const invitationsRes = await getMyInvitations()
-      setProjects(projectsRes.data.projects || [])
       setInvitations(invitationsRes.filter(i => i.status === 'PENDING'))
     } catch (error) {
       console.error('Failed to load dashboard data:', error)
@@ -118,11 +135,21 @@ export default function DashboardPage() {
     { label: 'Team Invites', value: invitations.length.toString(), change: 'ACTION REQUIRED', icon: FiUsers, color: 'orange' },
   ]
 
-  const recentActivity = [
-    { user: 'Sarah', action: 'updated the API documentation', time: '2 hours ago', type: 'update' },
-    { user: 'Alex', action: 'created a new high-priority bug ticket', time: '4 hours ago', type: 'create' },
-    { user: 'Mike', action: 'completed Sprint review', time: '1 day ago', type: 'complete' },
-  ]
+  const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([])
+  const [isLoadingActivity, setIsLoadingActivity] = useState(false)
+
+  const formatTimeAgo = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
+
+    if (diffInHours < 1) return 'Just now'
+    if (diffInHours < 24) return `${diffInHours} hours ago`
+    const diffInDays = Math.floor(diffInHours / 24)
+    if (diffInDays === 1) return 'Yesterday'
+    if (diffInDays < 7) return `${diffInDays} days ago`
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
 
   return (
     <Layout>
@@ -227,17 +254,26 @@ export default function DashboardPage() {
               <Card.Root bg="white" borderRadius="2xl" p={6}>
                 <Heading size="md" mb={6}>Recent Activity</Heading>
                 <VStack align="stretch" gap={4}>
-                  {recentActivity.map((activity, idx) => (
-                    <HStack key={idx} gap={3} align="start">
-                      <Box w="8px" h="8px" bg="brand.500" borderRadius="full" mt={2} />
-                      <Box>
-                        <Text fontSize="sm">
-                          <Text as="span" fontWeight="semibold">{activity.user}</Text> {activity.action}
-                        </Text>
-                        <Text fontSize="xs" color="gray.400">{activity.time}</Text>
-                      </Box>
-                    </HStack>
-                  ))}
+                  {isLoadingActivity ? (
+                    <Text fontSize="sm" color="gray.400" textAlign="center">Đang tải...</Text>
+                  ) : recentActivity.length === 0 ? (
+                    <Text fontSize="sm" color="gray.400" textAlign="center">Chưa có hoạt động nào</Text>
+                  ) : (
+                    recentActivity.slice(0, 5).map((activity) => (
+                      <HStack key={activity.id} gap={3} align="start">
+                        <Box w="8px" h="8px" bg="brand.500" borderRadius="full" mt={2} />
+                        <Box>
+                          <Text fontSize="sm">
+                            <Text as="span" fontWeight="semibold">{activity.user?.username || 'Unknown'}</Text>
+                            {' '}{activity.description}
+                          </Text>
+                          <Text fontSize="xs" color="gray.400">
+                            {formatTimeAgo(activity.createdAt)}
+                          </Text>
+                        </Box>
+                      </HStack>
+                    ))
+                  )}
                 </VStack>
                 <Button variant="ghost" colorPalette="brand" size="sm" mt={4} w="full">
                   View All Timeline
