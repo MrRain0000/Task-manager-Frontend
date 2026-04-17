@@ -311,6 +311,18 @@ export async function updateTaskStatus(projectId: number, taskId: number, reques
   })
 }
 
+export async function deleteTask(projectId: number, taskId: number): Promise<ApiResponse<null>> {
+  return fetchApi<null>(`/api/projects/${projectId}/tasks/${taskId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function searchTasks(projectId: number, keyword: string): Promise<ApiResponse<{ tasks: Task[]; totalCount: number }>> {
+  return fetchApi<{ tasks: Task[]; totalCount: number }>(`/api/projects/${projectId}/tasks/search?keyword=${encodeURIComponent(keyword)}`, {
+    method: 'GET',
+  })
+}
+
 // Invitation APIs
 export async function inviteMember(projectId: number, inviteeEmail: string): Promise<ApiResponse<null>> {
   return fetchApi<null>(`/api/projects/${projectId}/invite`, {
@@ -339,6 +351,27 @@ export async function respondToInvitation(projectId: number, request: RespondInv
 export async function getProjectDetail(projectId: number): Promise<ApiResponse<ProjectDetail>> {
   return fetchApi<ProjectDetail>(`/api/projects/${projectId}`, {
     method: 'GET',
+  })
+}
+
+// User Profile APIs
+export async function getCurrentUser(): Promise<ApiResponse<User & { totalProjects: number; totalTasks: number }>> {
+  return fetchApi<User & { totalProjects: number; totalTasks: number }>('/api/users/me', {
+    method: 'GET',
+  })
+}
+
+export async function updateUserProfile(username: string): Promise<ApiResponse<User & { totalProjects: number; totalTasks: number }>> {
+  return fetchApi<User & { totalProjects: number; totalTasks: number }>('/api/users/me', {
+    method: 'PUT',
+    body: JSON.stringify({ username }),
+  })
+}
+
+export async function changeUserPassword(currentPassword: string, newPassword: string): Promise<ApiResponse<null>> {
+  return fetchApi<null>('/api/users/me/password', {
+    method: 'PUT',
+    body: JSON.stringify({ currentPassword, newPassword }),
   })
 }
 

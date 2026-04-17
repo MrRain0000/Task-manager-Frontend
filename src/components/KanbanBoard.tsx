@@ -348,6 +348,12 @@ export default function KanbanBoard({
     onTaskUpdated?.(updatedTask)
   }
 
+  const handleTaskDeleted = (deletedTaskId: number) => {
+    // Remove the deleted task from the local state
+    // This will be handled by the parent component refreshing the data
+    handleCloseModal()
+  }
+
   return (
     <HStack align="start" gap={4} overflowX="auto" pb={2} h="full">
       {COLUMNS.map((column) => {
@@ -375,6 +381,7 @@ export default function KanbanBoard({
           onClose={handleCloseModal}
           members={members}
           onTaskUpdated={handleTaskUpdated}
+          onTaskDeleted={handleTaskDeleted}
         />
       )}
     </HStack>

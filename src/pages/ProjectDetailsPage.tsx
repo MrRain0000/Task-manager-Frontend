@@ -16,7 +16,7 @@ import {
 import { FiPlus, FiSearch, FiFolder, FiCheckCircle, FiClock } from 'react-icons/fi'
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { getProjects, getTasks, getProjectDetail, createTask, moveTask, type Project, type Task, type ProjectMember } from '../services/api'
+import { getProjects, getTasks, getProjectDetail, createTask, moveTask, getActivityLogs, searchTasks, type Project, type Task, type ProjectMember, type ActivityLog } from '../services/api'
 import Layout from '../components/Layout'
 import KanbanBoard from '../components/KanbanBoard'
 
@@ -30,7 +30,11 @@ export default function ProjectDetailsPage() {
   const [isCreatingTask, setIsCreatingTask] = useState(false)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [newTaskDesc, setNewTaskDesc] = useState('')
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchResults, setSearchResults] = useState<Task[] | null>(null)
   const dataLoadedRef = useRef(false)
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     if (projectId && !dataLoadedRef.current) {
@@ -41,10 +45,11 @@ export default function ProjectDetailsPage() {
 
   const loadProjectData = async (id: number) => {
     try {
-      const [projectsRes, tasksRes, projectDetailRes] = await Promise.all([
+      const [projectsRes, tasksRes, projectDetailRes, logsRes] = await Promise.all([
         getProjects(),
         getTasks(id),
         getProjectDetail(id),
+        getActivityLogs(id, 0, 10),
       ])
       const foundProject = projectsRes.data.projects.find((p: Project) => p.id === id)
       if (foundProject) {
@@ -52,6 +57,7 @@ export default function ProjectDetailsPage() {
       }
       setTasks(tasksRes.data)
       setMembers(projectDetailRes.data.members || [])
+      setActivityLogs(logsRes.data.content || [])
     } catch (error) {
       console.error('Failed to load project data:', error)
     } finally {
@@ -103,9 +109,38 @@ export default function ProjectDetailsPage() {
     }
   }
 
-  const filteredTasks = tasks.filter(t =>
-    t.title.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  // Debounced search
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    if (!searchQuery.trim()) {
+      setSearchResults(null)
+      return
+    }
+
+    setIsSearching(true)
+    searchTimeoutRef.current = setTimeout(async () => {
+      if (!projectId) return
+      try {
+        const response = await searchTasks(parseInt(projectId), searchQuery)
+        setSearchResults(response.data.tasks)
+      } catch (error) {
+        console.error('Search failed:', error)
+      } finally {
+        setIsSearching(false)
+      }
+    }, 300)
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchQuery, projectId])
+
+  const filteredTasks = searchResults !== null ? searchResults : tasks
 
   const completedCount = tasks.filter(t => t.status === 'DONE').length
   const totalCount = tasks.length
@@ -195,14 +230,15 @@ export default function ProjectDetailsPage() {
           <HStack justify="space-between" mb={6}>
             <Heading size="md">Active Workstream</Heading>
             <HStack gap={3}>
-              <HStack gap={2} maxW="250px">
+              <HStack gap={2} maxW="300px">
                 <Icon as={FiSearch} color="gray.400" />
                 <Input
-                  placeholder="Filter tasks..."
+                  placeholder="Tìm kiếm tasks..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   size="sm"
                 />
+                {isSearching && <Text fontSize="xs" color="gray.400">Đang tìm...</Text>}
               </HStack>
               <Button colorPalette="brand" size="sm" onClick={() => setIsCreatingTask(true)}>
                 <Icon as={FiPlus} mr={2} />
@@ -219,6 +255,7 @@ export default function ProjectDetailsPage() {
               projectId={parseInt(projectId || '0')}
               members={members}
               onMoveTask={handleMoveTask}
+              onTaskUpdated={() => projectId && loadProjectData(parseInt(projectId))}
             />
           )}
         </Card.Root>
@@ -253,25 +290,25 @@ export default function ProjectDetailsPage() {
           <GridItem>
             <Card.Root bg="white" borderRadius="2xl" p={6}>
               <Heading size="md" mb={4}>Team Activity</Heading>
-              <VStack align="stretch" gap={4}>
-                <HStack gap={3} align="start">
-                  <Box w="8px" h="8px" bg="brand.500" borderRadius="full" mt={2} />
-                  <Box>
-                    <Text fontSize="sm">
-                      <Text as="span" fontWeight="semibold">Alex</Text> created the design prototyping
-                    </Text>
-                    <Text fontSize="xs" color="gray.400">2 hours ago</Text>
-                  </Box>
-                </HStack>
-                <HStack gap={3} align="start">
-                  <Box w="8px" h="8px" bg="brand.500" borderRadius="full" mt={2} />
-                  <Box>
-                    <Text fontSize="sm">
-                      <Text as="span" fontWeight="semibold">Sarah</Text> added 4 new tasks to Sprint
-                    </Text>
-                    <Text fontSize="xs" color="gray.400">4 hours ago</Text>
-                  </Box>
-                </HStack>
+              <VStack align="stretch" gap={4} maxH="200px" overflowY="auto">
+                {activityLogs.length === 0 ? (
+                  <Text fontSize="sm" color="gray.400" textAlign="center">Chưa có hoạt động nào</Text>
+                ) : (
+                  activityLogs.slice(0, 5).map((log) => (
+                    <HStack key={log.id} gap={3} align="start">
+                      <Box w="8px" h="8px" bg="brand.500" borderRadius="full" mt={2} />
+                      <Box>
+                        <Text fontSize="sm">
+                          <Text as="span" fontWeight="semibold">{log.user?.username || 'Unknown'}</Text>
+                          {' '}{log.description}
+                        </Text>
+                        <Text fontSize="xs" color="gray.400">
+                          {new Date(log.createdAt).toLocaleString('vi-VN')}
+                        </Text>
+                      </Box>
+                    </HStack>
+                  ))
+                )}
               </VStack>
             </Card.Root>
           </GridItem>

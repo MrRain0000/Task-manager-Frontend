@@ -592,6 +592,28 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
   - `403`: User không phải thành viên ACCEPTED của project.
   - `404`: Task không tồn tại hoặc không thuộc project.
 
+### 4.7 Xóa Task
+- **URL**: `DELETE /api/projects/{projectId}/tasks/{taskId}`
+- **Auth Required**: Yes (Thành viên ACCEPTED của dự án)
+- **Path Params**:
+  - `projectId` (Long, Required): ID của dự án
+  - `taskId` (Long, Required): ID của task cần xóa
+- **Response** (200 OK):
+```json
+{
+    "status": 200,
+    "message": "Xóa task thành công",
+    "data": null
+}
+```
+- **Business Rules**:
+  - Task phải tồn tại và thuộc project được chỉ định.
+  - User phải là thành viên ACCEPTED của project.
+  - `TASK_DELETED` activity log sẽ được tạo tự động.
+- **Error Cases**:
+  - `403`: User không phải thành viên ACCEPTED của project.
+  - `404`: Task không tồn tại hoặc không thuộc project.
+
 ---
 
 ## 5. Audit Logs (Activity Logs)

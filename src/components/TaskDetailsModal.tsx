@@ -24,7 +24,7 @@ import {
   FiTrash2,
 } from 'react-icons/fi'
 import { useState, useEffect, useCallback } from 'react'
-import { getTaskDetail, getActivityLogs, updateTask, assignTask, type Task, type ActivityLog, type ProjectMember } from '../services/api'
+import { getTaskDetail, getActivityLogs, updateTask, assignTask, deleteTask, type Task, type ActivityLog, type ProjectMember } from '../services/api'
 
 interface TaskDetailsModalProps {
   projectId: number
@@ -33,6 +33,7 @@ interface TaskDetailsModalProps {
   onClose: () => void
   members: ProjectMember[]
   onTaskUpdated?: (task: Task) => void
+  onTaskDeleted?: (taskId: number) => void
 }
 
 interface SubTask {
@@ -55,6 +56,7 @@ export default function TaskDetailsModal({
   onClose,
   members,
   onTaskUpdated,
+  onTaskDeleted,
 }: TaskDetailsModalProps) {
   const [task, setTask] = useState<Task | null>(null)
   const [assignee, setAssignee] = useState<{ id: number; username: string; email: string } | null>(null)
@@ -145,6 +147,19 @@ export default function TaskDetailsModal({
       onTaskUpdated?.(res.data)
     } catch (error) {
       console.error('Failed to assign task:', error)
+    }
+  }
+
+  const handleDeleteTask = async () => {
+    if (!window.confirm('Bạn có chắc muốn xóa task này?')) return
+    
+    try {
+      await deleteTask(projectId, taskId)
+      onTaskDeleted?.(taskId)
+      onClose()
+    } catch (error) {
+      console.error('Failed to delete task:', error)
+      alert('Xóa task thất bại')
     }
   }
 
@@ -350,7 +365,10 @@ export default function TaskDetailsModal({
                           {subTask.title}
                         </Text>
                       </HStack>
-                      <Menu.Root>
+                      <Menu.Root onSelect={(details) => {
+                        if (details.value === 'edit') setIsEditing(true)
+                        if (details.value === 'delete') handleDeleteTask()
+                      }}>
                         <Menu.Trigger asChild>
                           <Box
                             p={1}

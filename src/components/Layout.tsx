@@ -19,6 +19,7 @@ import {
   FiSettings,
   FiHelpCircle,
   FiLogOut,
+  FiUser,
 } from 'react-icons/fi'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { getMyInvitations, type User } from '../services/api'
@@ -36,6 +37,7 @@ const navItems = [
   { path: '/projects', icon: FiFolder, label: 'Projects' },
   { path: '/invitations', icon: FiMail, label: 'Invitations', badge: 'invitationCount' },
   { path: '/team', icon: FiUsers, label: 'Team' },
+  { path: '/profile', icon: FiUser, label: 'Profile' },
 ]
 
 export default function Layout({ children }: LayoutProps) {
