@@ -1134,6 +1134,11 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
   - User phải là thành viên ACCEPTED của project chứa task chính.
   - `assigneeId` nếu có, phải là thành viên của project.
   - Activity log `SUBTASK_CREATED` được tạo.
+- **Log Output**:
+```
+[CreateSubTask] Bắt đầu - taskId=5, user=james@example.com
+[CreateSubTask] Thành công - subtaskId=10, title="Implement login UI"
+```
 - **Error Cases**:
   - `400`: Title trống hoặc quá dài (>200 ký tự).
   - `403`: User không có quyền.
@@ -1180,6 +1185,11 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
   - Các field không gửi sẽ giữ nguyên giá trị cũ.
   - Nếu `status` chuyển sang `DONE`, có thể trigger update progress task chính.
   - Activity log `SUBTASK_UPDATED` được tạo.
+- **Log Output** (khi status thay đổi):
+```
+[UpdateSubTask] Status thay đổi: TODO → DONE (subtaskId=9)
+[UpdateSubTask] Thành công - subtaskId=9
+```
 - **Error Cases**:
   - `404`: Sub-task không tồn tại.
   - `403`: User không có quyền.
@@ -1198,8 +1208,12 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
 ```
 - **Business Rules**:
   - Sub-task bị xóa hoàn toàn (hard delete).
-  - Reorder position của các sub-task còn lại.
   - Activity log `SUBTASK_DELETED` được tạo.
+- **Log Output**:
+```
+[DeleteSubTask] Bắt đầu - subtaskId=5, user=james@example.com
+[DeleteSubTask] Thành công - subtaskId=5 đã xóa
+```
 - **Error Cases**:
   - `404`: Sub-task không tồn tại.
   - `403`: User không có quyền.
@@ -1247,5 +1261,10 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
   - Trả về danh sách **không sort** (thứ tự tự nhiên từ DB).
   - Frontend tự sort theo nhu cầu (priority, createdAt, v.v.).
   - Include thông tin assignee (nếu có).
+- **Log Output**:
+```
+[GetSubTasks] Bắt đầu - taskId=13, user=james@example.com
+[GetSubTasks] Thành công - taskId=13, count=5
+```
 
 
