@@ -509,7 +509,6 @@ export interface SubTask {
   } | null
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
   status: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
-  position: number
   createdAt: string
   updatedAt: string
 }
@@ -527,10 +526,6 @@ export interface UpdateSubTaskRequest {
   assigneeId?: number | null
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
   status?: 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'
-}
-
-export interface ReorderSubTasksRequest {
-  subtaskIds: number[]
 }
 
 // Sub-task APIs
@@ -558,12 +553,5 @@ export async function updateSubTask(subtaskId: number, request: UpdateSubTaskReq
 export async function deleteSubTask(subtaskId: number): Promise<ApiResponse<null>> {
   return fetchApi<null>(`/api/subtasks/${subtaskId}`, {
     method: 'DELETE',
-  })
-}
-
-export async function reorderSubTasks(taskId: number, request: ReorderSubTasksRequest): Promise<ApiResponse<null>> {
-  return fetchApi<null>(`/api/tasks/${taskId}/subtasks/reorder`, {
-    method: 'PUT',
-    body: JSON.stringify(request),
   })
 }

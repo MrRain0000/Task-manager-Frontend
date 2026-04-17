@@ -1125,7 +1125,6 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
         },
         "priority": "HIGH",
         "status": "TODO",
-        "position": 0,
         "createdAt": "2024-01-15T10:30:00",
         "updatedAt": "2024-01-15T10:30:00"
     }
@@ -1134,7 +1133,6 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
 - **Business Rules**:
   - User phải là thành viên ACCEPTED của project chứa task chính.
   - `assigneeId` nếu có, phải là thành viên của project.
-  - `position` tự động tính (append vào cuối danh sách sub-tasks).
   - Activity log `SUBTASK_CREATED` được tạo.
 - **Error Cases**:
   - `400`: Title trống hoặc quá dài (>200 ký tự).
@@ -1172,7 +1170,6 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
         },
         "priority": "CRITICAL",
         "status": "IN_PROGRESS",
-        "position": 0,
         "createdAt": "2024-01-15T10:30:00",
         "updatedAt": "2024-01-15T14:20:00"
     }
@@ -1227,7 +1224,6 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
             },
             "priority": "HIGH",
             "status": "DONE",
-            "position": 0,
             "createdAt": "2024-01-15T10:30:00",
             "updatedAt": "2024-01-15T16:00:00"
         },
@@ -1239,7 +1235,6 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
             "assignee": null,
             "priority": "MEDIUM",
             "status": "TODO",
-            "position": 1,
             "createdAt": "2024-01-15T11:00:00",
             "updatedAt": "2024-01-15T11:00:00"
         }
@@ -1248,30 +1243,9 @@ Mọi API yêu cầu Authen đều phải đính kèm Header:
 ```
 - **Query Parameters**:
   - `status` (optional): Filter theo status (`TODO`, `IN_PROGRESS`, `DONE`, `CANCELLED`).
-  - `sort` (optional): `position`, `createdAt`, `priority`. Default: `position`.
 - **Business Rules**:
-  - Trả về danh sách sorted theo `position` ASC.
+  - Trả về danh sách **không sort** (thứ tự tự nhiên từ DB).
+  - Frontend tự sort theo nhu cầu (priority, createdAt, v.v.).
   - Include thông tin assignee (nếu có).
 
-### 12.5 Reorder Sub-tasks (Sắp xếp lại vị trí)
-- **URL**: `PUT /api/tasks/{taskId}/subtasks/reorder`
-- **Auth Required**: Yes (Thành viên ACCEPTED của project)
-- **Content-Type**: `application/json`
-- **Request Body**:
-```json
-{
-    "subtaskIds": [2, 1, 3]
-}
-```
-- **Response** (200 OK):
-```json
-{
-    "status": 200,
-    "message": "Sắp xếp lại sub-tasks thành công",
-    "data": null
-}
-```
-- **Business Rules**:
-  - `subtaskIds` phải chứa đủ và đúng các ID hiện có.
-  - Position sẽ được update theo thứ tự trong array.
 

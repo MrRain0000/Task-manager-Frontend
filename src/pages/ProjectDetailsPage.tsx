@@ -13,7 +13,7 @@ import {
   Grid,
   GridItem,
 } from '@chakra-ui/react'
-import { FiPlus, FiSearch, FiFolder, FiCheckCircle, FiClock } from 'react-icons/fi'
+import { FiPlus, FiSearch, FiFolder, FiCheckCircle, FiClock, FiAlertCircle } from 'react-icons/fi'
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { getProjects, getTasks, getProjectDetail, createTask, moveTask, getActivityLogs, searchTasks, type Project, type Task, type ProjectMember, type ActivityLog } from '../services/api'
@@ -32,6 +32,13 @@ export default function ProjectDetailsPage() {
   const [newTaskDesc, setNewTaskDesc] = useState('')
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([])
   const [isSearching, setIsSearching] = useState(false)
+
+  // Toast notification for incomplete subtasks error
+  const [toast, setToast] = useState<{
+    show: boolean
+    message: string
+    taskTitle: string
+  }>({ show: false, message: '', taskTitle: '' })
   const [searchResults, setSearchResults] = useState<Task[] | null>(null)
   const dataLoadedRef = useRef(false)
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -113,8 +120,19 @@ export default function ProjectDetailsPage() {
           return task
         })
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to move task:', error)
+      // Check if error is about incomplete subtasks when moving to DONE
+      if (toStatus === 'DONE' && error?.message?.includes('sub-task')) {
+        const task = tasks.find(t => t.id === taskId)
+        setToast({
+          show: true,
+          message: 'Không thể chuyển sang Done - còn sub-task chưa hoàn thành',
+          taskTitle: task?.title || 'Task'
+        })
+        // Auto hide after 5 seconds
+        setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000)
+      }
     }
   }
 
@@ -157,6 +175,45 @@ export default function ProjectDetailsPage() {
 
   return (
     <Layout>
+      {/* Toast Notification */}
+      {toast.show && (
+        <Box
+          position="fixed"
+          top={20}
+          left="50%"
+          transform="translateX(-50%)"
+          bg="red.50"
+          border="1px solid"
+          borderColor="red.200"
+          borderRadius="md"
+          p={4}
+          boxShadow="2xl"
+          zIndex={9999}
+          maxW="500px"
+          w="90%"
+        >
+          <HStack gap={3} align="start">
+            <Icon as={FiAlertCircle} color="red.500" boxSize={5} mt={0.5} />
+            <VStack align="stretch" gap={1} flex={1}>
+              <Text fontWeight="semibold" color="red.700">
+                {toast.message}
+              </Text>
+              <Text fontSize="sm" color="gray.600">
+                Task: <b>{toast.taskTitle}</b>
+              </Text>
+              <Button
+                size="xs"
+                variant="ghost"
+                color="red.600"
+                alignSelf="end"
+                onClick={() => setToast(prev => ({ ...prev, show: false }))}
+              >
+                Đóng
+              </Button>
+            </VStack>
+          </HStack>
+        </Box>
+      )}
       <VStack align="stretch" gap={6}>
         {/* Header */}
         <Box>

@@ -19,7 +19,6 @@ import {
   FiCheckCircle,
   FiCircle,
   FiPaperclip,
-  FiArchive,
   FiCheckSquare,
   FiEdit2,
   FiTrash2,
@@ -43,7 +42,6 @@ import {
   createSubTask,
   updateSubTask,
   deleteSubTask,
-  reorderSubTasks,
   updateTaskStatus,
   type Task,
   type ActivityLog,
@@ -87,6 +85,12 @@ export default function TaskDetailsModal({
   const [newSubTaskTitle, setNewSubTaskTitle] = useState('')
   const [editingSubTaskId, setEditingSubTaskId] = useState<number | null>(null)
   const [editingSubTaskTitle, setEditingSubTaskTitle] = useState('')
+  const [editingSubTaskStatus, setEditingSubTaskStatus] = useState<'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED'>('TODO')
+  const [editingSubTaskPriority, setEditingSubTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('MEDIUM')
+  const [isEditSubTaskDialogOpen, setIsEditSubTaskDialogOpen] = useState(false)
+
+  // Task status updating state (for visual feedback)
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
 
   // Error dialog state
   const [errorDialogOpen, setErrorDialogOpen] = useState(false)
@@ -293,10 +297,16 @@ export default function TaskDetailsModal({
       }
     }
 
+    // Optimistic UI - update immediately for smooth feel
+    const previousStatus = task.status
+    setTask(prev => prev ? { ...prev, status: newStatus } : null)
+
     try {
       const res = await updateTaskStatus(projectId, taskId, { status: newStatus })
       setTask(res.data)
     } catch (error: any) {
+      // Rollback on error
+      setTask(prev => prev ? { ...prev, status: previousStatus } : null)
       console.error('Failed to update task status:', error)
       alert(error.message || 'Cập nhật trạng thái task thất bại')
     }
@@ -357,11 +367,50 @@ export default function TaskDetailsModal({
     }
   }
 
-  // Start editing subtask
-  const startEditingSubTask = (subTask: SubTask) => {
+  // Open edit subtask dialog
+  const openEditSubTaskDialog = (subTask: SubTask) => {
     setEditingSubTaskId(subTask.id)
     setEditingSubTaskTitle(subTask.title)
+    setEditingSubTaskStatus(subTask.status)
+    setEditingSubTaskPriority(subTask.priority)
+    setIsEditSubTaskDialogOpen(true)
   }
+
+  // Handle save subtask with full fields
+  const handleSaveSubTask = async () => {
+    if (!editingSubTaskId || !editingSubTaskTitle.trim()) return
+    try {
+      const res = await updateSubTask(editingSubTaskId, {
+        title: editingSubTaskTitle.trim(),
+        status: editingSubTaskStatus,
+        priority: editingSubTaskPriority,
+      })
+      setSubTasks(prev => prev.map(st => st.id === editingSubTaskId ? res.data : st))
+      setIsEditSubTaskDialogOpen(false)
+      setEditingSubTaskId(null)
+      setEditingSubTaskTitle('')
+    } catch (error) {
+      console.error('Failed to update subtask:', error)
+      alert('Cập nhật sub-task thất bại')
+    }
+  }
+
+  // Priority order for sorting (CRITICAL first)
+  const priorityOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }
+
+  // Get priority color
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'CRITICAL': return 'red'
+      case 'HIGH': return 'orange'
+      case 'MEDIUM': return 'blue'
+      case 'LOW': return 'gray'
+      default: return 'gray'
+    }
+  }
+
+  // Sort subtasks by priority (CRITICAL > HIGH > MEDIUM > LOW)
+  const sortedSubTasks = [...subTasks].sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority])
 
   const completedSubTasks = subTasks.filter(st => st.status === 'DONE').length
 
@@ -638,14 +687,13 @@ export default function TaskDetailsModal({
                   </Box>
                 ) : (
                   <VStack align="stretch" gap={2} pl={6}>
-                    {subTasks.length === 0 ? (
+                    {sortedSubTasks.length === 0 ? (
                       <Text fontSize="sm" color="gray.400" fontStyle="italic">
                         Chưa có sub-task nào. Nhấn "+ Thêm" để tạo mới.
                       </Text>
                     ) : (
-                      subTasks.map((subTask) => {
+                      sortedSubTasks.map((subTask) => {
                         const isDone = subTask.status === 'DONE'
-                        const isEditing = editingSubTaskId === subTask.id
 
                         return (
                           <HStack
@@ -654,88 +702,68 @@ export default function TaskDetailsModal({
                             p={2}
                             borderRadius="md"
                             cursor="pointer"
-                            onClick={() => !isEditing && toggleSubTask(subTask.id)}
+                            onClick={() => toggleSubTask(subTask.id)}
                             _hover={{ bg: 'gray.50' }}
                             justify="space-between"
                           >
-                            {isEditing ? (
-                              <HStack gap={2} flex={1}>
-                                <input
-                                  value={editingSubTaskTitle}
-                                  onChange={(e) => setEditingSubTaskTitle(e.target.value)}
-                                  style={{
-                                    flex: 1,
-                                    padding: '0.5rem',
-                                    border: '1px solid #E5E7EB',
-                                    borderRadius: '0.375rem',
-                                    fontSize: '0.875rem',
-                                  }}
-                                  autoFocus
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleUpdateSubTask(subTask.id)
-                                    if (e.key === 'Escape') {
-                                      setEditingSubTaskId(null)
-                                      setEditingSubTaskTitle('')
-                                    }
-                                  }}
+                            <HStack gap={3} flex={1}>
+                              <Icon
+                                as={isDone ? FiCheckCircle : FiCircle}
+                                color={isDone ? 'brand.500' : 'gray.400'}
+                                boxSize={5}
+                              />
+                              <Text
+                                fontSize="sm"
+                                textDecoration={isDone ? 'line-through' : 'none'}
+                                color={isDone ? 'gray.400' : 'gray.700'}
+                              >
+                                {subTask.title}
+                              </Text>
+                              {/* Priority badge with color */}
+                              <Badge
+                                size="sm"
+                                colorPalette={getPriorityColor(subTask.priority)}
+                                variant="subtle"
+                              >
+                                {subTask.priority === 'CRITICAL' && '🔴 '}
+                                {subTask.priority === 'HIGH' && '🟠 '}
+                                {subTask.priority === 'MEDIUM' && '🔵 '}
+                                {subTask.priority === 'LOW' && '⚪ '}
+                                {subTask.priority}
+                              </Badge>
+                              {subTask.assignee && (
+                                <Badge size="sm" variant="subtle" colorPalette="gray">
+                                  {subTask.assignee.name}
+                                </Badge>
+                              )}
+                            </HStack>
+                            {/* Menu 3 dots - opens edit dialog */}
+                            <Menu.Root>
+                              <Menu.Trigger asChild>
+                                <Box
+                                  p={1}
+                                  borderRadius="md"
+                                  _hover={{ bg: 'gray.200' }}
                                   onClick={(e) => e.stopPropagation()}
-                                />
-                                <Button size="xs" colorPalette="brand" onClick={(e) => { e.stopPropagation(); handleUpdateSubTask(subTask.id) }}>
-                                  Lưu
-                                </Button>
-                                <Button size="xs" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingSubTaskId(null); setEditingSubTaskTitle('') }}>
-                                  Hủy
-                                </Button>
-                              </HStack>
-                            ) : (
-                              <>
-                                <HStack gap={3} flex={1}>
-                                  <Icon
-                                    as={isDone ? FiCheckCircle : FiCircle}
-                                    color={isDone ? 'brand.500' : 'gray.400'}
-                                    boxSize={5}
-                                  />
-                                  <Text
-                                    fontSize="sm"
-                                    textDecoration={isDone ? 'line-through' : 'none'}
-                                    color={isDone ? 'gray.400' : 'gray.700'}
-                                  >
-                                    {subTask.title}
-                                  </Text>
-                                  {subTask.assignee && (
-                                    <Badge size="sm" variant="subtle" colorPalette="gray">
-                                      {subTask.assignee.name}
-                                    </Badge>
-                                  )}
-                                </HStack>
-                                <Menu.Root>
-                                  <Menu.Trigger asChild>
-                                    <Box
-                                      p={1}
-                                      borderRadius="md"
-                                      _hover={{ bg: 'gray.200' }}
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Icon as={FiMoreHorizontal} boxSize={4} color="gray.400" />
-                                    </Box>
-                                  </Menu.Trigger>
-                                  <Menu.Content>
-                                    <Menu.Item value="edit" onClick={() => startEditingSubTask(subTask)}>
-                                      <HStack gap={2}>
-                                        <Icon as={FiEdit2} boxSize={4} />
-                                        <Text>Chỉnh sửa</Text>
-                                      </HStack>
-                                    </Menu.Item>
-                                    <Menu.Item value="delete" color="red.500" onClick={() => handleDeleteSubTask(subTask.id)}>
-                                      <HStack gap={2}>
-                                        <Icon as={FiTrash2} boxSize={4} />
-                                        <Text>Xóa</Text>
-                                      </HStack>
-                                    </Menu.Item>
-                                  </Menu.Content>
-                                </Menu.Root>
-                              </>
-                            )}
+                                >
+                                  <Icon as={FiMoreHorizontal} boxSize={4} color="gray.400" />
+                                </Box>
+                              </Menu.Trigger>
+                              <Menu.Content>
+                                <Menu.Item value="edit" onClick={() => openEditSubTaskDialog(subTask)}>
+                                  <HStack gap={2}>
+                                    <Icon as={FiEdit2} boxSize={4} />
+                                    <Text>Chỉnh sửa</Text>
+                                  </HStack>
+                                </Menu.Item>
+                                <Menu.Item value="delete" color="red.500" onClick={() => handleDeleteSubTask(subTask.id)}>
+                                  <HStack gap={2}>
+                                    <Icon as={FiTrash2} boxSize={4} />
+                                    <Text>Xóa</Text>
+                                  </HStack>
+                                </Menu.Item>
+                              </Menu.Content>
+                            </Menu.Root>
                           </HStack>
                         )
                       })
@@ -869,6 +897,7 @@ export default function TaskDetailsModal({
                     fontSize: '0.875rem',
                     backgroundColor: 'white',
                     cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
                   }}
                 >
                   <option value="TODO">🟠 To Do</option>
@@ -995,18 +1024,6 @@ export default function TaskDetailsModal({
                 </VStack>
               </VStack>
 
-              {/* Archive Button */}
-              <Button
-                variant="ghost"
-                size="sm"
-                w="full"
-                mt="auto"
-                color="gray.500"
-                _hover={{ color: 'red.500', bg: 'red.50' }}
-              >
-                <Icon as={FiArchive} mr={2} />
-                Archive Task
-              </Button>
             </VStack>
           </HStack>
         ) : null}
@@ -1054,6 +1071,82 @@ export default function TaskDetailsModal({
                     Đã hiểu
                   </Button>
                 </Dialog.ActionTrigger>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Dialog.Root>
+
+        {/* Edit Subtask Dialog */}
+        <Dialog.Root open={isEditSubTaskDialogOpen} onOpenChange={(e) => setIsEditSubTaskDialogOpen(e.open)}>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content>
+              <Dialog.Header>
+                <Dialog.Title>Chỉnh sửa Sub-task</Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body>
+                <VStack align="stretch" gap={4}>
+                  <VStack align="stretch" gap={2}>
+                    <Text fontSize="sm" fontWeight="semibold">Tiêu đề</Text>
+                    <input
+                      value={editingSubTaskTitle}
+                      onChange={(e) => setEditingSubTaskTitle(e.target.value)}
+                      style={{
+                        padding: '0.5rem',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '0.375rem',
+                        fontSize: '0.875rem',
+                      }}
+                      autoFocus
+                    />
+                  </VStack>
+                  <VStack align="stretch" gap={2}>
+                    <Text fontSize="sm" fontWeight="semibold">Trạng thái</Text>
+                    <select
+                      value={editingSubTaskStatus}
+                      onChange={(e) => setEditingSubTaskStatus(e.target.value as any)}
+                      style={{
+                        padding: '0.5rem',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '0.375rem',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      <option value="TODO">🟠 To Do</option>
+                      <option value="IN_PROGRESS">🔵 In Progress</option>
+                      <option value="DONE">🟢 Done</option>
+                      <option value="CANCELLED">⚪ Cancelled</option>
+                    </select>
+                  </VStack>
+                  <VStack align="stretch" gap={2}>
+                    <Text fontSize="sm" fontWeight="semibold">Độ ưu tiên</Text>
+                    <select
+                      value={editingSubTaskPriority}
+                      onChange={(e) => setEditingSubTaskPriority(e.target.value as any)}
+                      style={{
+                        padding: '0.5rem',
+                        border: '1px solid #E5E7EB',
+                        borderRadius: '0.375rem',
+                        fontSize: '0.875rem',
+                      }}
+                    >
+                      <option value="CRITICAL">🔴 Critical</option>
+                      <option value="HIGH">🟠 High</option>
+                      <option value="MEDIUM">🔵 Medium</option>
+                      <option value="LOW">⚪ Low</option>
+                    </select>
+                  </VStack>
+                </VStack>
+              </Dialog.Body>
+              <Dialog.Footer>
+                <Dialog.ActionTrigger asChild>
+                  <Button variant="ghost" onClick={() => setIsEditSubTaskDialogOpen(false)}>
+                    Hủy
+                  </Button>
+                </Dialog.ActionTrigger>
+                <Button colorPalette="brand" onClick={handleSaveSubTask}>
+                  Lưu
+                </Button>
               </Dialog.Footer>
             </Dialog.Content>
           </Dialog.Positioner>
